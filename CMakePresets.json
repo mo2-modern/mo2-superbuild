@@ -1,0 +1,40 @@
+{
+  "version": 3,
+  "configurePresets": [
+    {
+      "name": "vs2026",
+      "displayName": "MO2 (Visual Studio 2026, v145)",
+      "description": "Open this folder in Visual Studio or Rider, select this preset, build.",
+      "generator": "Visual Studio 18 2026",
+      "toolset": "v145",
+      "architecture": { "strategy": "set", "value": "x64" },
+      "binaryDir": "${sourceDir}/build",
+      "toolchainFile": "${sourceDir}/../mo2-modern/vcpkg/scripts/buildsystems/vcpkg.cmake",
+      "cacheVariables": {
+        "VCPKG_TARGET_TRIPLET": {
+          "type": "STRING",
+          "value": "x64-windows-static-md"
+        },
+        "MO2_SOURCE_ROOT": {
+          "type": "PATH",
+          "value": "${sourceDir}/../mo2-modern/build/build"
+        },
+        "CMAKE_INSTALL_PREFIX": {
+          "type": "PATH",
+          "value": "${sourceDir}/install"
+        },
+        "CMAKE_PREFIX_PATH": {
+          "type": "STRING",
+          "value": "${sourceDir}/../mo2-modern/tools/Qt/6.11.1/msvc2022_64"
+        }
+      }
+    }
+  ],
+  "buildPresets": [
+    {
+      "name": "vs2026",
+      "configurePreset": "vs2026",
+      "configuration": "RelWithDebInfo"
+    }
+  ]
+}

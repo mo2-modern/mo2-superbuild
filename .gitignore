@@ -1,0 +1,74 @@
+# Build output ---------------------------------------------------------------
+# `build/` is this project's binaryDir and `install/` its CMAKE_INSTALL_PREFIX,
+# both set in CMakePresets.json. Everything generated lands in one of the two.
+/build/
+/install/
+/out/
+
+# Note: no bare `cmake/` rule. That directory holds superbuild-redirects/, which
+# is source and must be committed. Only ignore IDE-generated cmake build dirs.
+cmake-build-*/
+
+# CMake ------------------------------------------------------------------------
+CMakeCache.txt
+CMakeFiles/
+CMakeScripts/
+cmake_install.cmake
+install_manifest.txt
+CTestTestfile.cmake
+compile_commands.json
+# Per-developer preset overrides. CMakePresets.json is committed; this is not.
+CMakeUserPresets.json
+
+# vcpkg --------------------------------------------------------------------------
+# Manifest mode installs dependencies into the build tree; never commit them.
+vcpkg_installed/
+.vcpkg-root
+
+# Visual Studio ------------------------------------------------------------------
+.vs/
+*.sln.docstates
+*.suo
+*.user
+*.userosscache
+*.sdf
+*.opensdf
+*.VC.db
+*.VC.VC.opendb
+
+# Rider / JetBrains ---------------------------------------------------------------
+.idea/
+*.iml
+
+# C# / .NET -----------------------------------------------------------------------
+# installer_omod carries a C# stub and NuGet references.
+[Bb]in/
+[Oo]bj/
+packages/
+*.nuget.props
+*.nuget.targets
+project.lock.json
+project.assets.json
+
+# Compiler / linker artefacts ------------------------------------------------------
+*.obj
+*.o
+*.lib
+*.a
+*.dll
+*.so
+*.dylib
+*.exe
+*.pdb
+*.ilk
+*.exp
+*.idb
+*.tlog
+*.lastbuildstate
+*.log
+
+# OS ------------------------------------------------------------------------------
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+.DS_Store

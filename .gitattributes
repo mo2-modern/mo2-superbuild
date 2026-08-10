@@ -1,0 +1,11 @@
+# Normalise to LF in the repository, check out native.
+* text=auto
+
+# CRLF is load-bearing in this project: the MO2 repositories mandate
+# `*.cpp text eol=crlf` and their clang-format runs with UseCRLF: true, so an
+# LF-writing tool reflows block comments and shreds license headers. Keep the
+# files that describe the build byte-identical to what the tree expects.
+*.cmake      text eol=crlf
+CMakeLists.txt text eol=crlf
+*.json       text eol=crlf
+*.md         text eol=crlf

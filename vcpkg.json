@@ -1,0 +1,18 @@
+{
+  "dependencies": ["spdlog", "7zip"],
+  "vcpkg-configuration": {
+    "default-registry": {
+      "kind": "git",
+      "repository": "https://github.com/Microsoft/vcpkg",
+      "baseline": "ea1a7396b05637a53bf23c078647ecc0edee4b80"
+    },
+    "registries": [
+      {
+        "kind": "git",
+        "repository": "https://github.com/mo2-modern/vcpkg-registry",
+        "baseline": "a71daa8718305d3d4f6e7fad955f2f1f2bb6c1be",
+        "packages": ["mo2-*", "spdlog"]
+      }
+    ]
+  }
+}
