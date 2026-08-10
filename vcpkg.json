@@ -1,5 +1,37 @@
 {
-  "dependencies": ["spdlog", "7zip"],
+  "dependencies": [
+    "7zip",
+    "asmjit",
+    "bext-di",
+    "boost-accumulators",
+    "boost-algorithm",
+    "boost-any",
+    "boost-assign",
+    "boost-date-time",
+    "boost-dll",
+    "boost-filesystem",
+    "boost-format",
+    "boost-graph",
+    "boost-headers",
+    "boost-interprocess",
+    "boost-locale",
+    "boost-multi-index",
+    "boost-predef",
+    "boost-program-options",
+    "boost-signals2",
+    "boost-thread",
+    "boost-uuid",
+    "directxtex",
+    "libloot",
+    "libudis86",
+    "lz4",
+    "mo2-dds-header",
+    "mo2-libbsarch",
+    "pybind11",
+    "spdlog",
+    "tomlplusplus",
+    "zlib"
+  ],
   "vcpkg-configuration": {
     "default-registry": {
       "kind": "git",
@@ -9,9 +41,15 @@
     "registries": [
       {
         "kind": "git",
+        "repository": "https://github.com/Microsoft/vcpkg",
+        "baseline": "ea1a7396b05637a53bf23c078647ecc0edee4b80",
+        "packages": ["boost*", "boost-*", "bext-*"]
+      },
+      {
+        "kind": "git",
         "repository": "https://github.com/mo2-modern/vcpkg-registry",
         "baseline": "a71daa8718305d3d4f6e7fad955f2f1f2bb6c1be",
-        "packages": ["mo2-*", "spdlog"]
+        "packages": ["mo2-*", "asmjit", "libloot", "pybind11", "spdlog"]
       }
     ]
   }

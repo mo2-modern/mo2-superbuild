@@ -48,8 +48,12 @@ list(APPEND CMAKE_PREFIX_PATH "${MO2_SOURCE_ROOT}/cmake_common")
 # --- redirect sibling packages to in-tree targets -------------------------------
 # <pkg>_DIR points straight at the directory holding <pkg>-config.cmake, which is
 # more explicit than relying on CMAKE_PREFIX_PATH search order.
+# mo2-dds-header and mo2-libbsarch are vcpkg registry ports, not sibling
+# repositories -- they resolve normally and need no redirect.
 set(_mo2_redirects "${CMAKE_CURRENT_LIST_DIR}/cmake/superbuild-redirects")
-set(mo2-uibase_DIR "${_mo2_redirects}" CACHE PATH "superbuild redirect" FORCE)
+foreach(_pkg mo2-uibase mo2-bsatk mo2-esptk mo2-archive mo2-lootcli-header)
+  set(${_pkg}_DIR "${_mo2_redirects}" CACHE PATH "superbuild redirect" FORCE)
+endforeach()
 
 # --- subprojects ----------------------------------------------------------------
 # Sources live outside this tree, so each needs an explicit binary directory.
@@ -57,13 +61,60 @@ function(mo2_add_repo name)
   add_subdirectory("${MO2_SOURCE_ROOT}/${name}" "${CMAKE_BINARY_DIR}/${name}")
 endfunction()
 
-# uibase first: 23 of the 63 find_package sites want it, and every plugin does.
-mo2_add_repo(uibase)
+# Order is dependency order, derived from the find_package(mo2-*) calls in each
+# repository rather than assumed. CMake needs the producing target to exist
+# before a consumer's find_package redirect runs.
 
-# Standalone libraries -- no cmake_common, no in-tree dependencies.
+# --- libraries with no in-tree dependencies ---
 mo2_add_repo(esptk)
 mo2_add_repo(archive)
+mo2_add_repo(bsatk)
+mo2_add_repo(lootcli)
+mo2_add_repo(helper)
 
-# First consumer of the uibase redirect, and the cheapest proof that it works:
-# installer_bain needs only mo2-cmake and mo2-uibase.
+# --- uibase: 23 of the 63 find_package sites want it, and every plugin does ---
+mo2_add_repo(uibase)
+
+# --- plugins that need only uibase ---
+mo2_add_repo(check_fnis)
+mo2_add_repo(diagnose_basic)
+mo2_add_repo(game_bethesda)
 mo2_add_repo(installer_bain)
+mo2_add_repo(installer_bundle)
+mo2_add_repo(installer_fomod)
+mo2_add_repo(installer_manual)
+mo2_add_repo(installer_quick)
+mo2_add_repo(nxmhandler)
+mo2_add_repo(preview_base)
+mo2_add_repo(tool_inibakery)
+mo2_add_repo(tool_inieditor)
+
+# --- Python-only plugins: these install .py files, no C++ target ---
+mo2_add_repo(basic_games)
+mo2_add_repo(fnistool)
+mo2_add_repo(form43_checker)
+mo2_add_repo(installer_wizard)
+mo2_add_repo(preview_dds)
+mo2_add_repo(script_extender_plugin_checker)
+mo2_add_repo(tool_configurator)
+
+# --- plugins needing uibase plus a sibling library ---
+mo2_add_repo(bsa_extractor)
+mo2_add_repo(preview_bsa)
+mo2_add_repo(bsapacker)
+
+# Still to come, and none is a one-liner:
+#
+#   usvfs           Dual-architecture (x86 AND x64). One configure produces one
+#                   architecture, so it needs ExternalProject_Add regardless of
+#                   how clean the rest becomes.
+#
+#   modorganizer    Blocked on usvfs: it calls find_package(usvfs), which is the
+#                   only cross-repo dependency in the tree not named mo2-*, and
+#                   so the only one a survey of find_package(mo2-*) misses.
+#
+#   plugin_python   pybind11 + SIP + PyQt against Python 3.14.
+#
+#   installer_omod, installer_fomod_csharp
+#                   C++/CLI. MSBuild-only, and installer_omod needs a NuGet
+#                   restore for its .NET references.
