@@ -49,7 +49,7 @@
         "kind": "git",
         "repository": "https://github.com/mo2-modern/vcpkg-registry",
         "baseline": "a71daa8718305d3d4f6e7fad955f2f1f2bb6c1be",
-        "packages": ["mo2-*", "asmjit", "libloot", "pybind11", "spdlog"]
+        "packages": ["mo2-*", "7zip", "asmjit", "libloot", "pybind11", "spdlog"]
       }
     ]
   }

@@ -142,6 +142,44 @@ list(APPEND CMAKE_PREFIX_PATH "${MO2_USVFS_PREFIX}")
 # header problem described above.
 install(DIRECTORY "${MO2_USVFS_PREFIX}/" DESTINATION "." USE_SOURCE_PERMISSIONS)
 
+# --- deployment: the parts of mob that are not a build system --------------------
+#
+# mob does more than orchestrate builds. It also fetches two components that are
+# not git repositories at all, and copies license texts out of its own checkout.
+# A build system that only builds produces an MO2 that starts and looks broken.
+
+# stylesheets: mob downloads nine release archives from GitHub and copies each
+# one's contents FLAT into bin/stylesheets -- every release in mob's table has an
+# empty top_level_folder, so there is no per-release subdirectory to strip. The
+# archives are already extracted in the checkout, one directory per release.
+file(GLOB _mo2_ss_releases "${MO2_SOURCE_ROOT}/stylesheets/*")
+foreach(_ss ${_mo2_ss_releases})
+  if(IS_DIRECTORY "${_ss}")
+    install(DIRECTORY "${_ss}/" DESTINATION bin/stylesheets)
+  endif()
+endforeach()
+
+# explorer++: a prebuilt binary MO2 ships, not a repository.
+if(EXISTS "${MO2_SOURCE_ROOT}/explorer++")
+  install(DIRECTORY "${MO2_SOURCE_ROOT}/explorer++/" DESTINATION bin/explorer++)
+endif()
+
+# licenses: these live in mob's own checkout rather than in any MO2 repository.
+# Retiring mob does not remove the obligation to ship them.
+set(MO2_LICENSES_DIR "${MO2_SOURCE_ROOT}/../../mob/licenses"
+    CACHE PATH "Directory of third-party license texts to ship in bin/licenses")
+if(EXISTS "${MO2_LICENSES_DIR}")
+  install(DIRECTORY "${MO2_LICENSES_DIR}/" DESTINATION bin/licenses)
+else()
+  message(STATUS "[MO2] licenses not found at ${MO2_LICENSES_DIR} -- bin/licenses will be empty")
+endif()
+
+# 7zip's runtime DLL. OPTIONAL because the file only exists once vcpkg has
+# populated the build tree, and a configure-time install() rule is evaluated
+# before that on a clean tree.
+install(FILES "${CMAKE_BINARY_DIR}/vcpkg_installed/${VCPKG_TARGET_TRIPLET}/bin/7zip.dll"
+        DESTINATION bin/dlls OPTIONAL)
+
 # --- subprojects ----------------------------------------------------------------
 # Sources live outside this tree, so each needs an explicit binary directory.
 function(mo2_add_repo name)
