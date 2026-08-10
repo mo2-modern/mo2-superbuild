@@ -47,13 +47,19 @@ than producing a confusing `find_package` error twenty lines later.
 
 ## Status
 
-**4 of 33 repositories** are wired up so far — `uibase`, `esptk`, `archive`, `installer_bain` —
-building clean at 0 errors / 0 warnings. The remaining 29 are mechanical additions, plus two
-that are not:
+**All 33 repositories build**, at 0 errors and 0 warnings, and MO2 built this way has been run:
+usvfs loads from this tree and installs 46 hooks (45 `type overwrite`, 1 `type chained patch`,
+0 errors), the same count the mob-driven build produces.
 
-- **usvfs** is dual-architecture (x86 *and* x64). One configure produces one architecture, so
-  it needs `ExternalProject_Add` no matter how clean the rest becomes.
-- **installer_omod** needs a NuGet restore for its .NET references.
+Install parity against the mob-built tree is **2 files**, both `usvfs_*targets-release.cmake` —
+CMake export files for the Release configuration, which this build does not produce because MO2
+ships RelWithDebInfo.
+
+**usvfs is the one repository that is not simply added as a subdirectory.** It is
+dual-architecture by design, and a single CMake configure produces one architecture, so both are
+built and installed at *configure* time. `ExternalProject_Add` is the usual answer and does not
+work here: it builds at *build* time, while `modorganizer`'s `find_package(usvfs)` has to resolve
+during configure. The first configure therefore takes a few minutes; every later one skips it.
 
 ## Why nothing upstream was edited
 
