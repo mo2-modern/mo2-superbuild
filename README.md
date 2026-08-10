@@ -32,10 +32,36 @@ cmake/superbuild-redirects/ makes find_package(mo2-*) work without installing fi
 | | |
 |---|---|
 | Visual Studio 2026 with the **v145** toolset | the C++/CLI plugins need MSBuild; no Ninja IDE can build them |
-| Qt 6.11.1 (msvc2022_64) | 3.3 GB, cannot come from vcpkg — MO2 needs WebEngine, i.e. a Chromium build |
-| An MO2 checkout | defaults to a sibling `mo2-modern`; override with `MO2_SOURCE_ROOT` |
+| Qt 6.11.1 (msvc2022_64) | 3.3 GB — see below |
 
-Everything else — spdlog, 7zip, boost, lz4 — is fetched by vcpkg on first configure.
+Everything else — the 33 repositories, spdlog, 7zip, boost, lz4, stylesheets, Explorer++ — comes
+from `--recursive`, vcpkg, or a download on first configure.
+
+### Qt
+
+Qt is the one thing this project cannot fetch for itself, and it is **not** downloaded
+automatically: 3.3 GB pulled silently inside an IDE configure, with no progress and no good
+recovery if the network drops, is worse than being told exactly what to run. Configure finds Qt in
+`./qt/`, in a sibling `mo2-modern/tools/Qt/`, or via `QTDIR`, and otherwise prints this:
+
+```
+py -3.14 -m pip install git+https://github.com/miurahr/aqtinstall
+py -3.14 -m aqt install-qt windows desktop 6.11.1 win64_msvc2022_64 \
+    -m qtwebengine qtwebchannel qtpositioning qtserialport qtimageformats \
+    -O ./qt
+```
+
+Two details that are easy to get wrong:
+
+- **aqt must come from git.** The PyPI release lags Qt's repository layout and fails on current
+  versions.
+- **The module list is not optional.** Upstream CI compiles MO2 without ever launching it, so its
+  list omits runtime-only modules. Without `qtimageformats` you get 4 image plugins instead of 9,
+  and MO2 silently cannot render TGA, TIFF or WebP mod previews — nothing fails at build time.
+
+Qt cannot come from vcpkg at all, because MO2 needs WebEngine, which means building Chromium.
+
+Already have Qt? `cmake --preset vs2026 -DMO2_QT_DIR=<prefix>`, or set `QTDIR`.
 
 The preset points `toolchainFile` at a **path**, deliberately, rather than `$env{VCPKG_ROOT}`:
 Visual Studio's `vcvarsall.bat` overwrites that variable with VS's own bundled vcpkg, so an IDE

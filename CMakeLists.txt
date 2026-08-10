@@ -55,6 +55,62 @@ endif()
 
 message(STATUS "[MO2] sources: ${MO2_SOURCE_ROOT}")
 
+# --- Qt -------------------------------------------------------------------------
+# Qt is the one prerequisite this project cannot provide for itself. It cannot be
+# built through vcpkg: MO2 needs WebEngine, which means a Chromium build.
+#
+# It is deliberately NOT downloaded automatically. It is 3.3 GB, and a configure
+# step that silently pulls that inside an IDE -- with no progress, and no good
+# recovery if the network drops halfway -- is worse than being told precisely
+# what to run. Discovery is automatic; acquisition is one command, printed below.
+set(MO2_QT_VERSION "6.11.1" CACHE STRING "Qt version to build against")
+set(MO2_QT_ARCH "msvc2022_64" CACHE STRING "Qt build to use; msvc2022_64 links fine against v145")
+set(MO2_QT_DIR "" CACHE PATH "Qt prefix. Auto-detected when empty")
+
+# Validate an explicitly supplied prefix too, rather than only an auto-detected
+# one: a wrong -DMO2_QT_DIR should say so here, not fail later inside find_package
+# with a message about Qt6Config.
+if(MO2_QT_DIR AND NOT EXISTS "${MO2_QT_DIR}/lib/cmake/Qt6/Qt6Config.cmake")
+  message(WARNING "MO2_QT_DIR is not a Qt prefix, ignoring it: ${MO2_QT_DIR}")
+  set(MO2_QT_DIR "")
+endif()
+
+if(NOT MO2_QT_DIR)
+  foreach(_qt_candidate
+      "${CMAKE_CURRENT_LIST_DIR}/qt/${MO2_QT_VERSION}/${MO2_QT_ARCH}"
+      "${CMAKE_CURRENT_LIST_DIR}/../mo2-modern/tools/Qt/${MO2_QT_VERSION}/${MO2_QT_ARCH}"
+      "$ENV{QTDIR}")
+    if(_qt_candidate AND EXISTS "${_qt_candidate}/lib/cmake/Qt6/Qt6Config.cmake")
+      set(MO2_QT_DIR "${_qt_candidate}")
+      break()
+    endif()
+  endforeach()
+endif()
+
+if(NOT MO2_QT_DIR)
+  message(FATAL_ERROR
+    "Qt ${MO2_QT_VERSION} (${MO2_QT_ARCH}) was not found.\n"
+    "\n"
+    "Install it with aqt, which must come from git -- the PyPI release lags Qt's\n"
+    "repository layout and fails on current versions:\n"
+    "\n"
+    "  py -3.14 -m pip install git+https://github.com/miurahr/aqtinstall\n"
+    "  py -3.14 -m aqt install-qt windows desktop ${MO2_QT_VERSION} win64_${MO2_QT_ARCH} \\\n"
+    "      -m qtwebengine qtwebchannel qtpositioning qtserialport qtimageformats \\\n"
+    "      -O \"${CMAKE_CURRENT_LIST_DIR}/qt\"\n"
+    "\n"
+    "The module list is not optional. Upstream CI compiles MO2 without launching\n"
+    "it, so its list omits runtime-only modules: without qtimageformats MO2 builds\n"
+    "4 image plugins instead of 9 and silently cannot render TGA, TIFF or WebP mod\n"
+    "previews, and nothing fails at build time.\n"
+    "\n"
+    "Already have Qt elsewhere? Point at it instead:\n"
+    "  cmake --preset vs2026 -DMO2_QT_DIR=<prefix>   (or set QTDIR)")
+endif()
+
+message(STATUS "[MO2] Qt: ${MO2_QT_DIR}")
+list(APPEND CMAKE_PREFIX_PATH "${MO2_QT_DIR}")
+
 # --- resolve mo2-cmake from source, no install required ------------------------
 list(APPEND CMAKE_PREFIX_PATH "${MO2_SOURCE_ROOT}/cmake_common")
 

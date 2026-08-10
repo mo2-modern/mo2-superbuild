@@ -26,10 +26,6 @@
         "CMAKE_INSTALL_PREFIX": {
           "type": "PATH",
           "value": "${sourceDir}/install"
-        },
-        "CMAKE_PREFIX_PATH": {
-          "type": "STRING",
-          "value": "${sourceDir}/../mo2-modern/tools/Qt/6.11.1/msvc2022_64"
         }
       }
     }
