@@ -1,7 +1,15 @@
 # MO2 — open, build, run
 
-Open this folder in **Visual Studio 2026** or **Rider**, pick the `vs2026` preset, build.
+```
+git clone --recursive https://github.com/mo2-modern/mo2-superbuild
+```
+
+Open the folder in **Visual Studio 2026** or **Rider**, pick the `vs2026` preset, build.
 No `env.ps1`, no mob, no environment variables.
+
+The 33 MO2 repositories are submodules under `repos/`, so `--recursive` gets them. If you already
+have a checkout from mob, skip `--recursive`: the build falls back to a sibling `mo2-modern` tree
+rather than making you clone several GB twice. Either way, `MO2_SOURCE_ROOT` overrides it.
 
 ## What this is
 

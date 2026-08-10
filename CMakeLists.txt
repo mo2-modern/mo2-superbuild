@@ -29,9 +29,20 @@ cmake_minimum_required(VERSION 3.25)
 project(mo2 LANGUAGES CXX)
 
 # --- where the repositories live ----------------------------------------------
-# Defaults to a sibling mo2-modern checkout. Point this anywhere; nothing else in
-# this file assumes a location, and no file is ever written inside it.
-set(MO2_SOURCE_ROOT "${CMAKE_CURRENT_LIST_DIR}/../mo2-modern/build/build"
+# The 33 repositories are submodules under repos/, so `git clone --recursive`
+# gives a complete checkout. If they have not been initialised, fall back to a
+# sibling mo2-modern tree, which is what a machine that used mob already has --
+# there is no reason to make someone clone several GB twice.
+#
+# Point this anywhere; nothing else in this file assumes a location, and no file
+# is ever written inside it.
+if(EXISTS "${CMAKE_CURRENT_LIST_DIR}/repos/uibase/CMakeLists.txt")
+  set(_mo2_default_root "${CMAKE_CURRENT_LIST_DIR}/repos")
+else()
+  set(_mo2_default_root "${CMAKE_CURRENT_LIST_DIR}/../mo2-modern/build/build")
+endif()
+
+set(MO2_SOURCE_ROOT "${_mo2_default_root}"
     CACHE PATH "Directory containing the MO2 repositories (uibase, usvfs, ...)")
 
 get_filename_component(MO2_SOURCE_ROOT "${MO2_SOURCE_ROOT}" ABSOLUTE)
@@ -148,21 +159,92 @@ install(DIRECTORY "${MO2_USVFS_PREFIX}/" DESTINATION "." USE_SOURCE_PERMISSIONS)
 # not git repositories at all, and copies license texts out of its own checkout.
 # A build system that only builds produces an MO2 that starts and looks broken.
 
-# stylesheets: mob downloads nine release archives from GitHub and copies each
-# one's contents FLAT into bin/stylesheets -- every release in mob's table has an
-# empty top_level_folder, so there is no per-release subdirectory to strip. The
-# archives are already extracted in the checkout, one directory per release.
-file(GLOB _mo2_ss_releases "${MO2_SOURCE_ROOT}/stylesheets/*")
+# Both of these are DOWNLOADED by mob, not built and not cloned, so a checkout
+# that has never seen mob does not have them. Prefer an existing directory when
+# one is there -- re-downloading what mob already fetched is pure waste -- and
+# otherwise fetch into the build tree. Versions and URLs match mob's tables in
+# src/tasks/stylesheets.cpp, src/tasks/explorerpp.cpp and mob.ini.
+
+set(MO2_PREBUILT_DIR "${CMAKE_BINARY_DIR}/prebuilt"
+    CACHE PATH "Where downloaded, non-buildable components are unpacked")
+set(MO2_EXPLORERPP_VERSION "1.4.0"
+    CACHE STRING "Explorer++ release to ship (mob.ini: explorerpp)")
+
+set(MO2_STYLESHEETS_DIR "${MO2_SOURCE_ROOT}/stylesheets"
+    CACHE PATH "Extracted stylesheet releases; downloaded if absent")
+set(MO2_EXPLORERPP_DIR "${MO2_SOURCE_ROOT}/explorer++"
+    CACHE PATH "Extracted Explorer++; downloaded if absent")
+
+# user|repo|version|archive-name -- mob's release table verbatim.
+# The separator is | and not ; on purpose: foreach() over a list of
+# semicolon-bearing strings flattens them into individual tokens, so the tuples
+# would silently come apart and produce empty URLs.
+set(_mo2_stylesheets
+  "6788-00|paper-light-and-dark|7.2|paper-light-and-dark"
+  "6788-00|paper-automata|3.2|paper-automata"
+  "6788-00|paper-mono|3.2|paper-mono"
+  "6788-00|1809-dark-mode|3.0|1809"
+  "Trosski|ModOrganizer_Style_Morrowind|1.1|Morrowind-MO2-Stylesheet"
+  "Trosski|Mod-Organizer-2-Skyrim-Stylesheet|v1.1|Skyrim-MO2-Stylesheet"
+  "Trosski|ModOrganizer_Style_Fallout3|v1.11|Fallout3-MO2-Stylesheet"
+  "Trosski|Mod-Organizer2-Fallout-4-Stylesheet|v1.11|Fallout4-MO2-Stylesheet"
+  "Trosski|Starfield_MO2_Stylesheet|V1.11|Starfield.MO2.Stylsheet")
+
+if(NOT EXISTS "${MO2_STYLESHEETS_DIR}")
+  set(MO2_STYLESHEETS_DIR "${MO2_PREBUILT_DIR}/stylesheets")
+  foreach(_entry IN LISTS _mo2_stylesheets)
+    string(REPLACE "|" ";" _parts "${_entry}")
+    list(GET _parts 0 _user)
+    list(GET _parts 1 _repo)
+    list(GET _parts 2 _ver)
+    list(GET _parts 3 _file)
+    # mob names the extracted directory <repo>-<version>; keep that, because the
+    # install step below simply copies every release directory's contents flat.
+    set(_dest "${MO2_STYLESHEETS_DIR}/${_repo}-${_ver}")
+    if(NOT EXISTS "${_dest}")
+      set(_archive "${MO2_PREBUILT_DIR}/${_repo}.7z")
+      message(STATUS "[MO2] downloading stylesheet ${_repo} ${_ver}")
+      file(DOWNLOAD
+        "https://github.com/${_user}/${_repo}/releases/download/${_ver}/${_file}.7z"
+        "${_archive}" STATUS _dl TLS_VERIFY ON)
+      list(GET _dl 0 _dl_code)
+      if(NOT _dl_code EQUAL 0)
+        list(GET _dl 1 _dl_msg)
+        message(FATAL_ERROR "downloading ${_repo}: ${_dl_msg}")
+      endif()
+      file(MAKE_DIRECTORY "${_dest}")
+      file(ARCHIVE_EXTRACT INPUT "${_archive}" DESTINATION "${_dest}")
+    endif()
+  endforeach()
+endif()
+
+# Every release in mob's table has an empty top_level_folder, so each extracted
+# directory's contents go FLAT into bin/stylesheets with nothing stripped.
+file(GLOB _mo2_ss_releases "${MO2_STYLESHEETS_DIR}/*")
 foreach(_ss ${_mo2_ss_releases})
   if(IS_DIRECTORY "${_ss}")
     install(DIRECTORY "${_ss}/" DESTINATION bin/stylesheets)
   endif()
 endforeach()
 
-# explorer++: a prebuilt binary MO2 ships, not a repository.
-if(EXISTS "${MO2_SOURCE_ROOT}/explorer++")
-  install(DIRECTORY "${MO2_SOURCE_ROOT}/explorer++/" DESTINATION bin/explorer++)
+# explorer++: a prebuilt binary MO2 ships, from its own site rather than GitHub.
+if(NOT EXISTS "${MO2_EXPLORERPP_DIR}")
+  set(MO2_EXPLORERPP_DIR "${MO2_PREBUILT_DIR}/explorer++")
+  set(_epp_zip "${MO2_PREBUILT_DIR}/explorerpp_x64.zip")
+  message(STATUS "[MO2] downloading Explorer++ ${MO2_EXPLORERPP_VERSION}")
+  file(DOWNLOAD
+    "https://download.explorerplusplus.com/stable/${MO2_EXPLORERPP_VERSION}/explorerpp_x64.zip"
+    "${_epp_zip}" STATUS _dl TLS_VERIFY ON)
+  list(GET _dl 0 _dl_code)
+  if(NOT _dl_code EQUAL 0)
+    list(GET _dl 1 _dl_msg)
+    message(FATAL_ERROR "downloading Explorer++: ${_dl_msg}")
+  endif()
+  file(MAKE_DIRECTORY "${MO2_EXPLORERPP_DIR}")
+  file(ARCHIVE_EXTRACT INPUT "${_epp_zip}" DESTINATION "${MO2_EXPLORERPP_DIR}")
 endif()
+
+install(DIRECTORY "${MO2_EXPLORERPP_DIR}/" DESTINATION bin/explorer++)
 
 # licenses: these live in mob's own checkout rather than in any MO2 repository.
 # Retiring mob does not remove the obligation to ship them.
