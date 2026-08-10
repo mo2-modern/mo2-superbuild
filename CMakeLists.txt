@@ -77,9 +77,28 @@ endforeach()
 # that deleting only the usvfs-Win32/usvfs-x64 directories is NOT enough, since
 # the guard checks the install.
 
+# usvfs gets a PRIVATE prefix, and it must stay private.
+#
+# Pointing it at CMAKE_INSTALL_PREFIX looks tidier and breaks the build. That
+# prefix already holds installed copies of uibase's headers from a previous
+# install, and this prefix goes on CMAKE_PREFIX_PATH so find_package(usvfs)
+# works -- which puts a second physical copy of every uibase header on the
+# include path, competing with the in-tree sources. uibase's formatters headers
+# use #pragma once, which dedupes by file identity rather than by guard macro,
+# so both copies are included and every std::formatter specialisation is defined
+# twice:
+#
+#   error C2953: 'std::formatter<QSize,CharT>': class template has already been defined
+#
+# 3137 errors, from a change that only meant to relocate an install. The usvfs
+# artifacts are copied into the shared prefix at install time instead, below,
+# which cannot affect any include path.
 set(MO2_USVFS_PREFIX "${CMAKE_BINARY_DIR}/usvfs-install")
 
-if(NOT EXISTS "${MO2_USVFS_PREFIX}/lib/cmake/usvfs/usvfs-config.cmake")
+# usvfs writes usvfsConfig.cmake, NOT usvfs-config.cmake. find_package accepts
+# either spelling, so getting this wrong does not break resolution -- it breaks
+# the guard silently, and usvfs is rebuilt from scratch on every configure.
+if(NOT EXISTS "${MO2_USVFS_PREFIX}/lib/cmake/usvfs/usvfsConfig.cmake")
   foreach(_pair "Win32:x86-windows-static-md" "x64:x64-windows-static-md")
     string(REPLACE ":" ";" _pair "${_pair}")
     list(GET _pair 0 _arch)
@@ -115,6 +134,13 @@ if(NOT EXISTS "${MO2_USVFS_PREFIX}/lib/cmake/usvfs/usvfs-config.cmake")
 endif()
 
 list(APPEND CMAKE_PREFIX_PATH "${MO2_USVFS_PREFIX}")
+
+# Copy usvfs's private install tree into the shared prefix at install time, so
+# the headers, import libraries and CMake package land beside everything else
+# exactly as mob leaves them. This runs during `cmake --install`, long after
+# every include path has been decided, so it cannot reintroduce the duplicate
+# header problem described above.
+install(DIRECTORY "${MO2_USVFS_PREFIX}/" DESTINATION "." USE_SOURCE_PERMISSIONS)
 
 # --- subprojects ----------------------------------------------------------------
 # Sources live outside this tree, so each needs an explicit binary directory.
@@ -199,9 +225,18 @@ mo2_add_repo(bsapacker)
 # a survey of find_package(mo2-*) misses entirely.
 mo2_add_repo(modorganizer)
 
-# Still to come:
-#
-#   plugin_python   pybind11 + SIP + PyQt against Python 3.14.
+# --- Python proxy: pybind11 + SIP + PyQt against Python 3.14 ---
+# mo2_python_install_pyqt() pip-installs PyQt6 into ${CMAKE_BINARY_DIR}/pylibs.
+# In the superbuild that is the top-level build directory, so there is one shared
+# pylibs rather than one per repository -- which also avoids the stale *.dist-info
+# accumulation that --target installs cause when each repo keeps its own.
+mo2_add_repo(plugin_python)
+
+# --- C++/CLI plugins: MSBuild only, no Ninja generator can build these ---
+# installer_omod additionally restores NuGet packages, which is why the preset
+# sets CMAKE_VS_NUGET_PACKAGE_RESTORE.
+mo2_add_repo(installer_fomod_csharp)
+mo2_add_repo(installer_omod)
 #
 #   installer_omod, installer_fomod_csharp
 #                   C++/CLI. MSBuild-only, and installer_omod needs a NuGet
