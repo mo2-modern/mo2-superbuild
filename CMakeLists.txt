@@ -22,7 +22,9 @@
 #       break. cmake/superbuild-redirects/ stands in, asserting the alias target
 #       already exists.
 
-cmake_minimum_required(VERSION 3.22)
+# 3.25 for the SYSTEM target property, which is load-bearing here -- see
+# mo2_mark_package_target below.
+cmake_minimum_required(VERSION 3.25)
 
 project(mo2 LANGUAGES CXX)
 
@@ -55,10 +57,92 @@ foreach(_pkg mo2-uibase mo2-bsatk mo2-esptk mo2-archive mo2-lootcli-header)
   set(${_pkg}_DIR "${_mo2_redirects}" CACHE PATH "superbuild redirect" FORCE)
 endforeach()
 
+# --- usvfs: both architectures, built at configure time --------------------------
+#
+# usvfs is the one repository that cannot simply be add_subdirectory()'d. It is
+# dual-architecture by design -- the x86 DLL is injected into 32-bit games, the
+# x64 one into 64-bit games -- and a single CMake configure produces exactly one
+# architecture. Its installed usvfs-config.cmake includes BOTH usvfs_x86Targets
+# and usvfs_x64Targets from one prefix and then aliases usvfs::usvfs, and
+# modorganizer references usvfs_x86::usvfs_dll and usvfs_x64::usvfs_proxy
+# directly in generator expressions. So both must exist as imported targets.
+#
+# ExternalProject_Add is the usual answer and is wrong here: it builds at BUILD
+# time, while modorganizer's find_package(usvfs) resolves at CONFIGURE time.
+# Building it here instead keeps modorganizer a first-class project in the
+# solution rather than a nested sub-build the IDE cannot see into.
+#
+# Cost: the first configure builds usvfs twice, a few minutes. Afterwards the
+# guard below skips it. Delete build/usvfs-install to force a rebuild -- and note
+# that deleting only the usvfs-Win32/usvfs-x64 directories is NOT enough, since
+# the guard checks the install.
+
+set(MO2_USVFS_PREFIX "${CMAKE_BINARY_DIR}/usvfs-install")
+
+if(NOT EXISTS "${MO2_USVFS_PREFIX}/lib/cmake/usvfs/usvfs-config.cmake")
+  foreach(_pair "Win32:x86-windows-static-md" "x64:x64-windows-static-md")
+    string(REPLACE ":" ";" _pair "${_pair}")
+    list(GET _pair 0 _arch)
+    list(GET _pair 1 _triplet)
+
+    message(STATUS "[MO2] building usvfs (${_arch}) -- first configure only")
+
+    execute_process(
+      COMMAND "${CMAKE_COMMAND}"
+        -S "${MO2_SOURCE_ROOT}/usvfs"
+        -B "${CMAKE_BINARY_DIR}/usvfs-${_arch}"
+        -G "${CMAKE_GENERATOR}"
+        -A "${_arch}"
+        -T "${CMAKE_GENERATOR_TOOLSET}"
+        "-DCMAKE_TOOLCHAIN_FILE=${CMAKE_TOOLCHAIN_FILE}"
+        "-DVCPKG_TARGET_TRIPLET=${_triplet}"
+        "-DCMAKE_INSTALL_PREFIX=${MO2_USVFS_PREFIX}"
+      RESULT_VARIABLE _usvfs_configure
+      OUTPUT_VARIABLE _usvfs_out ERROR_VARIABLE _usvfs_out)
+    if(NOT _usvfs_configure EQUAL 0)
+      message(FATAL_ERROR "usvfs ${_arch} configure failed:\n${_usvfs_out}")
+    endif()
+
+    execute_process(
+      COMMAND "${CMAKE_COMMAND}" --build "${CMAKE_BINARY_DIR}/usvfs-${_arch}"
+              --config RelWithDebInfo --target install
+      RESULT_VARIABLE _usvfs_build
+      OUTPUT_VARIABLE _usvfs_out ERROR_VARIABLE _usvfs_out)
+    if(NOT _usvfs_build EQUAL 0)
+      message(FATAL_ERROR "usvfs ${_arch} build failed:\n${_usvfs_out}")
+    endif()
+  endforeach()
+endif()
+
+list(APPEND CMAKE_PREFIX_PATH "${MO2_USVFS_PREFIX}")
+
 # --- subprojects ----------------------------------------------------------------
 # Sources live outside this tree, so each needs an explicit binary directory.
 function(mo2_add_repo name)
   add_subdirectory("${MO2_SOURCE_ROOT}/${name}" "${CMAKE_BINARY_DIR}/${name}")
+endfunction()
+
+# Anything that stands in for an installed package must be marked SYSTEM, or the
+# superbuild is stricter than mob and fails on warnings mob never sees.
+#
+# CMake treats an IMPORTED target's INTERFACE_INCLUDE_DIRECTORIES as SYSTEM by
+# default. Under mob, mo2::uibase is imported, so modorganizer compiles with
+#
+#     /external:I ".../install/include/uibase"
+#
+# and ExternalWarningLevel=TurnOffAllWarnings silences everything in uibase's
+# public headers. In the superbuild the same target is an ordinary in-tree
+# target, its includes are passed as regular ones, and every warning inside a
+# public header lands on the consumer's /WX. modorganizer failed with 84
+# instances of C4100 in uibase's moddatachecker.h -- a real unreferenced
+# parameter that mob has simply never shown anyone.
+#
+# Marking these SYSTEM restores parity. It does NOT hide warnings in the
+# library's own build: uibase is still compiled at /W4 /WX by its own project.
+function(mo2_mark_package_target target)
+  if(TARGET ${target})
+    set_target_properties(${target} PROPERTIES SYSTEM TRUE)
+  endif()
 endfunction()
 
 # Order is dependency order, derived from the find_package(mo2-*) calls in each
@@ -74,6 +158,12 @@ mo2_add_repo(helper)
 
 # --- uibase: 23 of the 63 find_package sites want it, and every plugin does ---
 mo2_add_repo(uibase)
+
+# Every target consumed through a find_package redirect, marked SYSTEM so
+# consumers see it exactly as they would the installed package.
+foreach(_pkg_target uibase archive bsatk esptk lootcli-header)
+  mo2_mark_package_target(${_pkg_target})
+endforeach()
 
 # --- plugins that need only uibase ---
 mo2_add_repo(check_fnis)
@@ -103,15 +193,13 @@ mo2_add_repo(bsa_extractor)
 mo2_add_repo(preview_bsa)
 mo2_add_repo(bsapacker)
 
-# Still to come, and none is a one-liner:
-#
-#   usvfs           Dual-architecture (x86 AND x64). One configure produces one
-#                   architecture, so it needs ExternalProject_Add regardless of
-#                   how clean the rest becomes.
-#
-#   modorganizer    Blocked on usvfs: it calls find_package(usvfs), which is the
-#                   only cross-repo dependency in the tree not named mo2-*, and
-#                   so the only one a survey of find_package(mo2-*) misses.
+# --- the application itself ------------------------------------------------------
+# Needs archive, bsatk, esptk, lootcli-header, uibase and usvfs. find_package(usvfs)
+# is the only cross-repo dependency in the tree not named mo2-*, and so the only one
+# a survey of find_package(mo2-*) misses entirely.
+mo2_add_repo(modorganizer)
+
+# Still to come:
 #
 #   plugin_python   pybind11 + SIP + PyQt against Python 3.14.
 #

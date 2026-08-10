@@ -15,6 +15,10 @@
           "type": "STRING",
           "value": "x64-windows-static-md"
         },
+        "CMAKE_VS_NUGET_PACKAGE_RESTORE": {
+          "type": "BOOL",
+          "value": "ON"
+        },
         "MO2_SOURCE_ROOT": {
           "type": "PATH",
           "value": "${sourceDir}/../mo2-modern/build/build"

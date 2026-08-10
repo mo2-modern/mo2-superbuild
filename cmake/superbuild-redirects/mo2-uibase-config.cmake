@@ -38,7 +38,10 @@ if(MO2_CMAKE_DEPRECATED_UIBASE_INCLUDE)
     # applies to the underlying target. The directories therefore become visible
     # to every consumer rather than only those that asked -- which is also what
     # the installed layout does, since uibase is installed once with them present.
-    target_include_directories(uibase INTERFACE
+    # SYSTEM, matching how mob passes them: the installed config attaches these
+    # to an IMPORTED target, so CMake emits /external:I and uibase's public
+    # headers are exempt from the consumer's /W4 /WX.
+    target_include_directories(uibase SYSTEM INTERFACE
       "${MO2_SOURCE_ROOT}/uibase/include/uibase"
       "${MO2_SOURCE_ROOT}/uibase/include/uibase/game_features")
     set_property(GLOBAL PROPERTY _MO2_UIBASE_LEGACY_INCLUDES TRUE)
