@@ -1,0 +1,94 @@
+name: Build MO2
+
+# One workflow for the whole project. The 33 per-repo build.yml files each drive
+# mob through ModOrganizer2/build-with-mob-action@master, which builds against
+# UPSTREAM's mob rather than our fork -- so they cannot verify this tree without
+# that action being forked first. The superbuild has no such dependency: clone,
+# configure, build. It also proves something per-repo CI never does, that the 34
+# repositories build *together* at the commits the gitlinks name.
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+  workflow_dispatch:
+
+# Deliberately NOT `push: branches: [main]` while this is unproven -- a cold run
+# is ~112 vcpkg packages plus a full MO2 build. Turn it on once a warm cache has
+# shown the incremental cost.
+
+env:
+  MO2_QT_VERSION: "6.11.1"
+  MO2_QT_ARCH: "msvc2022_64"
+
+jobs:
+  build:
+    # NOT windows-2025: that image is Visual Studio Enterprise 2022 17.14 with
+    # toolsets v142/v143 only, and this tree needs v145. This label is VS
+    # Enterprise 2026 18.8 with v145 14.51.36247 and CMake 4.4.2, which is our
+    # exact pin. There is no windows-2026 image.
+    runs-on: windows-2025-vs2026
+    timeout-minutes: 300
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      # The tree is pinned to 3.14; this image defaults to 3.12.
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+
+      # vcpkg writes its binary cache through the Actions cache service, which
+      # needs these two variables exported into the job environment.
+      - name: Export Actions cache credentials
+        uses: actions/github-script@v7
+        with:
+          script: |
+            core.exportVariable('ACTIONS_CACHE_URL', process.env.ACTIONS_CACHE_URL || '');
+            core.exportVariable('ACTIONS_RUNTIME_TOKEN', process.env.ACTIONS_RUNTIME_TOKEN || '');
+
+      # Qt is the one prerequisite the project cannot provide for itself: it
+      # needs WebEngine, which vcpkg would have to build Chromium for. The
+      # superbuild looks for it at ./qt/<version>/<arch>, which is exactly the
+      # layout `aqt -O qt` produces.
+      - name: Cache Qt
+        id: cache-qt
+        uses: actions/cache@v4
+        with:
+          path: qt
+          key: qt-${{ env.MO2_QT_VERSION }}-${{ env.MO2_QT_ARCH }}-v1
+
+      - name: Install Qt
+        if: steps.cache-qt.outputs.cache-hit != 'true'
+        shell: pwsh
+        run: |
+          # aqt must come from git -- the PyPI release lags Qt's repo layout.
+          python -m pip install git+https://github.com/miurahr/aqtinstall
+          # The module list is not optional. Upstream CI compiles MO2 without
+          # launching it, so its list omits runtime-only modules; without
+          # qtimageformats MO2 builds 4 image plugins instead of 9 and silently
+          # cannot render TGA, TIFF or WebP mod previews, failing nothing at
+          # build time.
+          python -m aqt install-qt windows desktop $env:MO2_QT_VERSION win64_$env:MO2_QT_ARCH `
+            -m qtwebengine qtwebchannel qtpositioning qtserialport qtimageformats `
+            -O qt
+
+      - name: Configure
+        shell: pwsh
+        env:
+          VCPKG_BINARY_SOURCES: "clear;x-gha,readwrite"
+        run: cmake --preset vs2026
+
+      - name: Build
+        shell: pwsh
+        run: cmake --build build --config RelWithDebInfo
+
+      - name: Install
+        shell: pwsh
+        run: cmake --install build --config RelWithDebInfo
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ModOrganizer2
+          path: install/bin
