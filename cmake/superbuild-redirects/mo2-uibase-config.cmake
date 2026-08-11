@@ -41,9 +41,20 @@ if(MO2_CMAKE_DEPRECATED_UIBASE_INCLUDE)
     # SYSTEM, matching how mob passes them: the installed config attaches these
     # to an IMPORTED target, so CMake emits /external:I and uibase's public
     # headers are exempt from the consumer's /W4 /WX.
+    # $<BUILD_INTERFACE:> is required, not decoration. uibase is installed with
+    # install(EXPORT), and CMake refuses to export an interface include directory
+    # that lives inside the project's own source tree:
+    #
+    #   Target "uibase" INTERFACE_SYSTEM_INCLUDE_DIRECTORIES property contains
+    #   path "…/repos/uibase/include/uibase" which is prefixed in the source
+    #   directory.
+    #
+    # That only appears once the repositories are submodules under repos/ -- with
+    # a sibling checkout the path is outside the project and the check passes, so
+    # this stays invisible until someone actually clones the project.
     target_include_directories(uibase SYSTEM INTERFACE
-      "${MO2_SOURCE_ROOT}/uibase/include/uibase"
-      "${MO2_SOURCE_ROOT}/uibase/include/uibase/game_features")
+      "$<BUILD_INTERFACE:${MO2_SOURCE_ROOT}/uibase/include/uibase>"
+      "$<BUILD_INTERFACE:${MO2_SOURCE_ROOT}/uibase/include/uibase/game_features>")
     set_property(GLOBAL PROPERTY _MO2_UIBASE_LEGACY_INCLUDES TRUE)
   endif()
 endif()
