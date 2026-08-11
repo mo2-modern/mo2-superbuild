@@ -39,14 +39,50 @@ jobs:
         with:
           python-version: "3.14"
 
-      # vcpkg writes its binary cache through the Actions cache service, which
-      # needs these two variables exported into the job environment.
-      - name: Export Actions cache credentials
-        uses: actions/github-script@v9
+      # vcpkg's own binary cache, carried by actions/cache.
+      #
+      # NOT x-gha. That backend has been REMOVED from vcpkg -- run 31522069038
+      # passed "clear;x-gha,readwrite", got
+      #   warning: The 'x-gha' binary caching backend has been removed
+      # and then built all 112 packages from source while reporting success. The
+      # environment was fine; the backend is gone.
+      #
+      # The `files` provider is content-addressed by vcpkg's own ABI hash, which
+      # already includes the compiler version, so a key that is stale in some way
+      # we did not anticipate costs a cache miss and never a wrong binary.
+      - name: Cache vcpkg binaries
+        uses: actions/cache@v6
         with:
-          script: |
-            core.exportVariable('ACTIONS_CACHE_URL', process.env.ACTIONS_CACHE_URL || '');
-            core.exportVariable('ACTIONS_RUNTIME_TOKEN', process.env.ACTIONS_RUNTIME_TOKEN || '');
+          path: vcpkg-cache
+          key: vcpkg-${{ runner.os }}-vs2026-${{ hashFiles('vcpkg.json') }}-${{ hashFiles('.gitmodules') }}
+          restore-keys: |
+            vcpkg-${{ runner.os }}-vs2026-${{ hashFiles('vcpkg.json') }}-
+            vcpkg-${{ runner.os }}-vs2026-
+
+      # usvfs is built at CONFIGURE time, both architectures, each a full nested
+      # CMake project with its own vcpkg manifest -- including an entire x86
+      # dependency set the main build never needs. Locally that is 1.9 GB of
+      # build trees producing an 83 MB install.
+      #
+      # The skip-guard is the existence of usvfs-install/lib/cmake/usvfs/
+      # usvfsConfig.cmake in the build tree, so a fresh runner always misses it
+      # and pays the cost on every single run, unlike vcpkg whose cost the cache
+      # above removes.
+      #
+      # The key is the usvfs gitlink itself, so it changes exactly when usvfs
+      # does. It must also carry the toolset and image: the guard tests only that
+      # the file EXISTS, not what built it, so a cache restored across a compiler
+      # change would be used silently.
+      - name: usvfs revision
+        id: usvfs
+        shell: pwsh
+        run: echo "sha=$(git rev-parse HEAD:repos/usvfs)" >> $env:GITHUB_OUTPUT
+
+      - name: Cache built usvfs
+        uses: actions/cache@v6
+        with:
+          path: build/usvfs-install
+          key: usvfs-${{ steps.usvfs.outputs.sha }}-v145-${{ runner.os }}-vs2026
 
       # Qt is the one prerequisite the project cannot provide for itself: it
       # needs WebEngine, which vcpkg would have to build Chromium for. The
@@ -92,7 +128,7 @@ jobs:
       - name: Configure
         shell: pwsh
         env:
-          VCPKG_BINARY_SOURCES: "clear;x-gha,readwrite"
+          VCPKG_BINARY_SOURCES: "clear;files,${{ github.workspace }}\\vcpkg-cache,readwrite"
         run: cmake --preset vs2026
 
       - name: Build

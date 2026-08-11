@@ -28,6 +28,10 @@ CMakeUserPresets.json
 # Manifest mode installs dependencies into the build tree; never commit them.
 vcpkg_installed/
 .vcpkg-root
+# The `files` binary-cache provider's directory. CI points VCPKG_BINARY_SOURCES
+# here and actions/cache carries it between runs; locally it is whatever you
+# point that variable at.
+/vcpkg-cache/
 
 # Visual Studio ------------------------------------------------------------------
 .vs/
