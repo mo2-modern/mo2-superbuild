@@ -147,12 +147,43 @@ fork identity) must **not** be included.
 
 ---
 
-## Missing forks that block Phase 4
+## Missing forks, and what they actually block
 
-Two upstream action repos are **not** forked into the org. Every `build.yml` references them by
-`@master`, so our CI would silently build against upstream's mob:
+Two upstream action repos are **not** forked into the org. Measured 2026-08-11; this had been
+recorded as one ten-minute task blocking Phase 4 entirely, and the two halves are not alike.
 
-- `ModOrganizer2/build-with-mob-action`
-- `ModOrganizer2/check-formatting-action`
+| Action | Repos referencing it | What forking buys |
+|---|---|---|
+| `ModOrganizer2/build-with-mob-action@master` | 18 | **Correctness.** It builds against *upstream's* mob, not our fork on `modern`, so per-repo CI cannot verify this tree |
+| `ModOrganizer2/check-formatting-action@master` | 20 | **A pinned SHA.** Nothing else — see below |
 
-**Forking both is a ten-minute task and is the first step of Phase 4.**
+The formatting action pins clang-format **22** internally and exposes no version input; its only
+inputs are `check-path`, `exclude-regex`, `fallback-style` and `include-regex`. Our repos pin three
+versions in `.pre-commit-config.yaml`, not the four long recorded: **`22.1.5` ×19, `19.1.5` ×5,
+`22.1.2` ×2**. Only three of the five 19.1.5 repos run the action, and all three are clean under
+*both* formatters — checked with the actual pinned binaries from the pre-commit cache. They agree by
+being 4, 11 and 6 files, not because the versions match.
+
+**Neither fork blocks CI any longer.** The superbuild needs no action at all, and its workflow lives
+in this repository at `.github/workflows/build.yml`.
+
+### An upstream gap this turned up (not counted above — nothing is fixed)
+
+**Three C++ repositories ship no `.clang-format`**, and there is none anywhere up the parent tree,
+so clang-format falls back to LLVM style in them:
+
+| Repo | C++ files | Runs the formatting action |
+|---|---|---|
+| `bsapacker` | 123 | no |
+| `installer_omod` | 27 | no |
+| `bsa_extractor` | 2 | **yes** — passes, because two files happen to satisfy LLVM style |
+
+Nothing is red today, and that is luck rather than design: under their own pinned formatter
+`bsapacker` and `installer_omod` produce roughly **3200 and 800** complaints. This is upstream's
+configuration, not ours.
+
+⚠️ **The trap is in the remedy.** Rolling a lint workflow out uniformly turns both repos red at
+once, and the obvious response — run the formatter over them — is the mass-reformat anti-pattern:
+a semantic, tree-wide diff against repositories we have to keep merging from upstream, which turns
+every sync into a conflict-resolution session. Add a `.clang-format` matching the sibling repos
+first, or leave these three out of the rollout.
