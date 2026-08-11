@@ -472,6 +472,25 @@ never launches it, so runtime-only modules are missing. Confirmed gaps: **`qtser
 render TGA/TIFF/WebP mod previews — nothing fails at build time). **Re-check the module list at
 every Qt bump.**
 
+🔴 **And our own list was incomplete in the opposite direction, for four months.** The `aqt`
+command `CMakeLists.txt` prints when Qt is missing — repeated verbatim in `README.md` and
+`BUILD.md` — omitted **`qtwebsockets`** and **`qtnetworkauth`**, both named by
+`modorganizer/src/CMakeLists.txt`. Anyone following the project's own instructions on a clean
+machine could not configure.
+
+It survived because **every machine here already had a fuller Qt from Phase 1**, so no local build
+could expose it. `docs/history/PHASE1-TOOLCHAIN.md` had the correct list all along; the live
+instructions were rewritten later and lost two entries. **Frozen history stayed right while the
+live document drifted** — when they disagree, the one nobody edits is often the accurate one.
+
+**The cost shape is what makes this expensive:** `find_package(Qt6)` resolves only *after* vcpkg has
+built all 112 packages, so a one-word omission fails **30 minutes in**, every time. A missing
+build-time module is loud and late; a missing runtime-only module is silent forever. Neither is
+caught by any local build on a machine that already has Qt.
+
+**Nothing verified this until CI ran it.** The instructions were checked for existing, never by
+following them on a machine that lacked the thing they install.
+
 **`dlls.manifest` is a cross-check, not a spec.** `liblz4.dll` is listed but present in neither
 build, and the known-good build ran fine — the static triplet means that DLL never exists. A missing
 manifest entry is not automatically a fault.
