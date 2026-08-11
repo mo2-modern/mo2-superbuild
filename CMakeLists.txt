@@ -26,6 +26,23 @@
 # mo2_mark_package_target below.
 cmake_minimum_required(VERSION 3.25)
 
+# --- vcpkg must be present before project() -----------------------------------
+# The preset points CMAKE_TOOLCHAIN_FILE into vcpkg/, which is a submodule. CMake
+# reads the toolchain file inside project(), so a clone without --recursive dies
+# there with "Could not find toolchain file" and no hint about what to do about
+# it. This check runs first and says it.
+if(CMAKE_TOOLCHAIN_FILE AND NOT EXISTS "${CMAKE_TOOLCHAIN_FILE}")
+  message(FATAL_ERROR
+    "vcpkg is missing. Expected its toolchain file at:\n"
+    "  ${CMAKE_TOOLCHAIN_FILE}\n"
+    "vcpkg is a submodule of this repository, pinned to the commit every "
+    "manifest in the tree names as its baseline. Fetch it with:\n"
+    "  git submodule update --init vcpkg\n"
+    "That is 0.14 GB. `git clone --recursive` fetches it along with the 34 "
+    "repositories under repos/; if you cloned without it, run "
+    "`git submodule update --init` to get everything.")
+endif()
+
 project(mo2 LANGUAGES CXX)
 
 # --- where the repositories live ----------------------------------------------
