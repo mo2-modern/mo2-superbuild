@@ -30,19 +30,19 @@ jobs:
     timeout-minutes: 300
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           submodules: recursive
 
       # The tree is pinned to 3.14; this image defaults to 3.12.
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.14"
 
       # vcpkg writes its binary cache through the Actions cache service, which
       # needs these two variables exported into the job environment.
       - name: Export Actions cache credentials
-        uses: actions/github-script@v7
+        uses: actions/github-script@v9
         with:
           script: |
             core.exportVariable('ACTIONS_CACHE_URL', process.env.ACTIONS_CACHE_URL || '');
@@ -54,7 +54,7 @@ jobs:
       # layout `aqt -O qt` produces.
       - name: Cache Qt
         id: cache-qt
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: qt
           # Bump the suffix whenever the module list below changes. The restore
@@ -103,7 +103,7 @@ jobs:
         shell: pwsh
         run: cmake --install build --config RelWithDebInfo
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: ModOrganizer2
           path: install/bin
