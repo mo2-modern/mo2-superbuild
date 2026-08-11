@@ -1,8 +1,12 @@
 # Build output ---------------------------------------------------------------
 # `build/` is this project's binaryDir and `install/` its CMAKE_INSTALL_PREFIX,
 # both set in CMakePresets.json. Everything generated lands in one of the two.
-/build/
-/install/
+#
+# The glob matters: `/build/` alone leaves a second tree such as build-fresh/ or
+# build-debug/ untracked-but-not-ignored, which is how one shows up in
+# `git status` and, worse, in a careless `git add -A`.
+/build*/
+/install*/
 /out/
 
 # Note: no bare `cmake/` rule. That directory holds superbuild-redirects/, which
