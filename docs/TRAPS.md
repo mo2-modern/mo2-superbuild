@@ -491,6 +491,27 @@ caught by any local build on a machine that already has Qt.
 **Nothing verified this until CI ran it.** The instructions were checked for existing, never by
 following them on a machine that lacked the thing they install.
 
+🔴 **144 `IMPORTED_LOCATION not set` errors that only appear inside an IDE — and exit code 0.**
+Visual Studio writes a CMake **file API** query into `build/.cmake/api/v1/query/`. Answering
+`codemodel-v2` makes CMake resolve imported-target locations for **every** configuration, and the
+imported *tool* executables (`Qt::uic`, `Qt::qmlcachegen`, `Python::Interpreter`) have no location
+for all four. `Debug` passes; `Release`, `MinSizeRel` and `RelWithDebInfo` each produce a wall.
+
+**Generation still completes, build files are written, and CMake exits 0.** So the build works and
+every non-IDE check is blind to it: mob, the command line, a clean clone and CI all pass. The only
+thing that sees it is the IDE, which is exactly what this project tells people to use.
+
+**Reproduce or clear it by moving that one directory**, not by touching code. Copying only
+`.cmake/api/v1/query/` into a clean build tree takes it from 0 errors to 144.
+
+⚠️ **Four plausible explanations are wrong. Do not re-open them.** The CMake version (VS ships its
+own **4.3.1** at `Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin`, while PATH has **4.4.2** —
+a real difference, and not this one); a stale `Z_VCPKG_ROOT_DIR` left by a toolchain-path change;
+the `vcvars` developer environment; and leftover `prebuilt`/`pylibs`. Each was tested and cleared.
+
+**The IDE does not use the CMake on your PATH.** `env.ps1` can insist on 4.4.2 all it likes; Visual
+Studio runs 4.3.1 from its own install. Any version-sensitive check must account for both.
+
 **`dlls.manifest` is a cross-check, not a spec.** `liblz4.dll` is listed but present in neither
 build, and the known-good build ran fine — the static triplet means that DLL never exists. A missing
 manifest entry is not automatically a fault.
