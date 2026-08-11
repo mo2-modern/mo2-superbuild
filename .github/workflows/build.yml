@@ -57,7 +57,11 @@ jobs:
         uses: actions/cache@v4
         with:
           path: qt
-          key: qt-${{ env.MO2_QT_VERSION }}-${{ env.MO2_QT_ARCH }}-v1
+          # Bump the suffix whenever the module list below changes. The restore
+          # is keyed on version and arch only, so a cache saved with a shorter
+          # module list would be restored happily and fail configure half an
+          # hour later on a missing component.
+          key: qt-${{ env.MO2_QT_VERSION }}-${{ env.MO2_QT_ARCH }}-mods2-v2
 
       - name: Install Qt
         if: steps.cache-qt.outputs.cache-hit != 'true'
@@ -65,13 +69,24 @@ jobs:
         run: |
           # aqt must come from git -- the PyPI release lags Qt's repo layout.
           python -m pip install git+https://github.com/miurahr/aqtinstall
-          # The module list is not optional. Upstream CI compiles MO2 without
-          # launching it, so its list omits runtime-only modules; without
-          # qtimageformats MO2 builds 4 image plugins instead of 9 and silently
-          # cannot render TGA, TIFF or WebP mod previews, failing nothing at
-          # build time.
+          # The module list is not optional and fails in two directions.
+          #
+          # qtwebsockets and qtnetworkauth are BUILD requirements, both named by
+          # modorganizer/src/CMakeLists.txt. Run 31518812267 omitted them and
+          # died on "Failed to find required Qt component WebSockets" after 30
+          # minutes -- configure resolves Qt only once vcpkg has built all 112
+          # packages, so a missing component costs a full run to discover.
+          #
+          # qtimageformats is a RUNTIME requirement and fails silently instead:
+          # upstream CI compiles MO2 without launching it, so its list omits
+          # runtime-only modules, and without this one MO2 builds 4 image
+          # plugins instead of 9 and cannot render TGA, TIFF or WebP previews.
+          #
+          # This list matches the Qt install that demonstrably builds and runs
+          # this tree; keep it in step with the one CMakeLists.txt prints.
           python -m aqt install-qt windows desktop $env:MO2_QT_VERSION win64_$env:MO2_QT_ARCH `
             -m qtwebengine qtwebchannel qtpositioning qtserialport qtimageformats `
+               qtwebsockets qtnetworkauth qttasktree `
             -O qt
 
       - name: Configure

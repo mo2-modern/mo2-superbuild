@@ -76,6 +76,7 @@ recovery if the network drops, is worse than being told exactly what to run. Con
 py -3.14 -m pip install git+https://github.com/miurahr/aqtinstall
 py -3.14 -m aqt install-qt windows desktop 6.11.1 win64_msvc2022_64 \
     -m qtwebengine qtwebchannel qtpositioning qtserialport qtimageformats \
+       qtwebsockets qtnetworkauth qttasktree \
     -O ./qt
 ```
 

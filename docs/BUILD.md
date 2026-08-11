@@ -48,13 +48,20 @@ Chromium build.
 py -3.14 -m pip install git+https://github.com/miurahr/aqtinstall
 py -3.14 -m aqt install-qt windows desktop 6.11.1 win64_msvc2022_64 `
     -m qtwebengine qtwebchannel qtpositioning qtserialport qtimageformats `
+       qtwebsockets qtnetworkauth qttasktree `
     -O F:\dev\mo2-modern\tools\Qt
 ```
 
 Two things are easy to get wrong. **aqt must come from git**: the PyPI release lags Qt's repository
-layout. **The module list is not optional**: upstream CI compiles MO2 without launching it, so its
-list omits runtime-only modules. Without `qtimageformats` you get 4 image plugins instead of 9, and
-MO2 silently cannot render TGA, TIFF or WebP mod previews. Nothing fails at build time.
+layout. **The module list is not optional**, and it fails in two directions:
+
+- `qtwebsockets` and `qtnetworkauth` are **build** requirements — `modorganizer/src/CMakeLists.txt`
+  names both. Omitting either stops configure with *"Failed to find required Qt component"*, and it
+  stops there **after** vcpkg has built every dependency, so you find out roughly half an hour in.
+- `qtimageformats` is a **runtime** requirement and fails silently instead. Upstream CI compiles MO2
+  without launching it, so its list omits runtime-only modules. Without this one you get 4 image
+  plugins instead of 9, and MO2 cannot render TGA, TIFF or WebP mod previews. Nothing fails at
+  build time.
 
 **4. Get vcpkg.**
 
