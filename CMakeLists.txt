@@ -452,3 +452,28 @@ mo2_add_repo(installer_omod)
 #   installer_omod, installer_fomod_csharp
 #                   C++/CLI. MSBuild-only, and installer_omod needs a NuGet
 #                   restore for its .NET references.
+
+# --- what you get when you press Build --------------------------------------------
+# "Open the folder, press Build, get a working MO2" needs two things, and both have
+# to be set here rather than in cmake_common, because both are read from the
+# top-level scope only.
+#
+#   INSTALL in the default build
+#       mo2.cmake already sets CMAKE_VS_INCLUDE_INSTALL_TO_DEFAULT_BUILD, but it
+#       arrives through find_package(mo2-cmake) inside each repository, so it lands
+#       in that repository's directory scope and never reaches the solution --
+#       ALL_BUILD.vcxproj ends up with no reference to INSTALL at all. Setting it
+#       here is what actually puts INSTALL into the default build. Without it a
+#       green build leaves install/ empty, and install/ is the only place MO2 can
+#       run from: the build tree has no plugins, stylesheets, usvfs or Qt runtime
+#       beside the executable.
+#
+#   the startup project
+#       mo2_configure_target() sets VS_STARTUP_PROJECT on ${PROJECT_SOURCE_DIR},
+#       i.e. each repository's own directory. Visual Studio reads that property from
+#       the top-level source directory only, so all ~20 of those are silently
+#       ignored and the IDE falls back to the first target alphabetically: archive,
+#       a DLL, which cannot be launched at all.
+set(CMAKE_VS_INCLUDE_INSTALL_TO_DEFAULT_BUILD ON)
+set_property(DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+             PROPERTY VS_STARTUP_PROJECT organizer)

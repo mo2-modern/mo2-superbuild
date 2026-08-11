@@ -22,6 +22,10 @@
         "CMAKE_INSTALL_PREFIX": {
           "type": "PATH",
           "value": "${sourceDir}/install"
+        },
+        "CMAKE_DISABLE_FIND_PACKAGE_WrapVulkanHeaders": {
+          "type": "BOOL",
+          "value": "ON"
         }
       }
     }
