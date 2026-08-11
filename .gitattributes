@@ -9,3 +9,7 @@
 CMakeLists.txt text eol=crlf
 *.json       text eol=crlf
 *.md         text eol=crlf
+
+# Third-party license texts are reproduced, not authored. Keep them byte-for-byte
+# as received rather than letting `text=auto` renormalise them.
+licenses/**  -text

@@ -319,14 +319,24 @@ endif()
 
 install(DIRECTORY "${MO2_EXPLORERPP_DIR}/" DESTINATION bin/explorer++)
 
-# licenses: these live in mob's own checkout rather than in any MO2 repository.
-# Retiring mob does not remove the obligation to ship them.
-set(MO2_LICENSES_DIR "${MO2_SOURCE_ROOT}/../../mob/licenses"
+# licenses: these belong to no MO2 repository -- they lived only in mob's own
+# checkout, so they are vendored here. Retiring mob does not remove the
+# obligation to ship them, and that obligation must not depend on a mob checkout
+# happening to sit at a fixed relative offset: MO2_SOURCE_ROOT/../../mob/licenses
+# resolves in a tree that was built with mob and silently does not in a clean
+# clone, which shipped MO2 with no license texts at all and said so in one
+# STATUS line.
+set(MO2_LICENSES_DIR "${CMAKE_CURRENT_LIST_DIR}/licenses"
     CACHE PATH "Directory of third-party license texts to ship in bin/licenses")
 if(EXISTS "${MO2_LICENSES_DIR}")
   install(DIRECTORY "${MO2_LICENSES_DIR}/" DESTINATION bin/licenses)
 else()
-  message(STATUS "[MO2] licenses not found at ${MO2_LICENSES_DIR} -- bin/licenses will be empty")
+  # Only reachable when MO2_LICENSES_DIR has been overridden to a bad path --
+  # the default is inside this repository. Loud, because shipping without them
+  # is a licensing failure rather than a missing convenience.
+  message(WARNING
+    "[MO2] license texts not found at ${MO2_LICENSES_DIR}.\n"
+    "bin/licenses will be EMPTY and the build must not be distributed.")
 endif()
 
 # 7zip's runtime DLL. OPTIONAL because the file only exists once vcpkg has
