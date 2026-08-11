@@ -26,6 +26,10 @@
         "CMAKE_DISABLE_FIND_PACKAGE_WrapVulkanHeaders": {
           "type": "BOOL",
           "value": "ON"
+        },
+        "VCPKG_INSTALL_OPTIONS": {
+          "type": "STRING",
+          "value": "--x-buildtrees-root=$env{LOCALAPPDATA}/vcpkg/buildtrees;--x-packages-root=$env{LOCALAPPDATA}/vcpkg/packages;--downloads-root=$env{LOCALAPPDATA}/vcpkg/downloads"
         }
       }
     }
