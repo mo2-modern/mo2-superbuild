@@ -9,7 +9,7 @@
       "toolset": "v145",
       "architecture": { "strategy": "set", "value": "x64" },
       "binaryDir": "${sourceDir}/build",
-      "toolchainFile": "${sourceDir}/../mo2-modern/vcpkg/scripts/buildsystems/vcpkg.cmake",
+      "toolchainFile": "${sourceDir}/vcpkg/scripts/buildsystems/vcpkg.cmake",
       "cacheVariables": {
         "VCPKG_TARGET_TRIPLET": {
           "type": "STRING",
@@ -18,10 +18,6 @@
         "CMAKE_VS_NUGET_PACKAGE_RESTORE": {
           "type": "BOOL",
           "value": "ON"
-        },
-        "MO2_SOURCE_ROOT": {
-          "type": "PATH",
-          "value": "${sourceDir}/../mo2-modern/build/build"
         },
         "CMAKE_INSTALL_PREFIX": {
           "type": "PATH",

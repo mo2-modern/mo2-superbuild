@@ -130,3 +130,10 @@
 	path = repos/modorganizer
 	url = https://github.com/mo2-modern/modorganizer.git
 	branch = modern
+[submodule "usvfs"]
+	path = repos/usvfs
+	url = https://github.com/mo2-modern/usvfs.git
+	branch = modern
+[submodule "vcpkg"]
+	path = vcpkg
+	url = https://github.com/microsoft/vcpkg.git
