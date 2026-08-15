@@ -40,6 +40,20 @@ Upstream is on VS2022 / v143 / CMake 3.31.6 / Python 3.13. Every one of those mo
 
 ---
 
+## What the preset sets, and why
+
+`CMakePresets.json` is JSON, so it cannot carry comments. Each non-obvious setting is recorded here
+instead.
+
+| Setting | Why |
+|---|---|
+| `toolchainFile` as a **path**, not `$env{VCPKG_ROOT}` | Visual Studio's `vcvarsall.bat` overwrites that variable with VS's own bundled vcpkg, so a build trusting it resolves every dependency against the wrong one — see [TRAPS.md](TRAPS.md#vcpkg) |
+| `VCPKG_TARGET_TRIPLET: x64-windows-static-md` | The whole tree is static-CRT-with-dynamic-MD. Mixing this across a DLL boundary is an ABI mismatch, not a warning |
+| `VCPKG_INSTALL_OPTIONS` → `%LOCALAPPDATA%\vcpkg` | Keeps buildtrees, packages and downloads (~3 GB) out of the workspace. `CMakeLists.txt` forwards this to the nested usvfs configures, which would otherwise write into `vcpkg/` |
+| `CMAKE_VS_NUGET_PACKAGE_RESTORE: ON` | `installer_omod` has .NET references that need a NuGet restore |
+| `CMAKE_INSTALL_PREFIX: ${sourceDir}/install` | MO2 only runs from a populated install tree; keeping it beside `build/` makes both gitignored by one rule |
+| `CMAKE_DISABLE_FIND_PACKAGE_WrapVulkanHeaders: ON` | ⚠️ **Provenance not recorded.** It suppresses Qt's optional Vulkan-headers lookup, presumably to avoid a failure on machines without the Vulkan SDK. Nobody wrote down which failure. **Re-test at the next Qt bump** — if a future Qt genuinely needs Vulkan headers this breaks silently and the reason will not be findable |
+
 ## Repository model
 
 **34 repos**: 33 MO2 repos plus `mob`, all forked into the

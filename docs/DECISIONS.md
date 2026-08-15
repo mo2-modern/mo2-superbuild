@@ -1,6 +1,6 @@
 # Decision log
 
-Architecture Decision Records for mo2-modern. Each entry states what was decided, **why**, and
+Architecture Decision Records for the MO2 superbuild. Each entry states what was decided, **why**, and
 whether it is still binding. The *why* is the point: this project's constraints are unusual (34
 tracked forks, a bleeding-edge toolchain, a DLL-injection component that a green build cannot
 verify) and several decisions look wrong without it.

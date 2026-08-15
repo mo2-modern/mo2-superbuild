@@ -60,6 +60,28 @@ set(MO2_SOURCE_ROOT "${_mo2_default_root}"
 get_filename_component(MO2_SOURCE_ROOT "${MO2_SOURCE_ROOT}" ABSOLUTE)
 
 if(NOT EXISTS "${MO2_SOURCE_ROOT}/uibase/CMakeLists.txt")
+  # Distinguish "your submodules are missing" from "you pointed this somewhere
+  # wrong". They are the same symptom and completely different fixes, and the
+  # first is far more common: someone who cloned without --recursive, or who
+  # followed the toolchain error above and fetched only the vcpkg submodule,
+  # lands here with MO2_SOURCE_ROOT reporting a sibling directory they have
+  # never heard of and no mention of submodules at all.
+  if(MO2_SOURCE_ROOT STREQUAL "${CMAKE_CURRENT_LIST_DIR}/repos"
+     OR NOT EXISTS "${CMAKE_CURRENT_LIST_DIR}/repos/uibase/CMakeLists.txt")
+    message(FATAL_ERROR
+      "The MO2 repositories are missing from repos/.\n"
+      "\n"
+      "They are submodules of this repository. Fetch them with:\n"
+      "  git submodule update --init\n"
+      "\n"
+      "That is several GB. `git clone --recursive` would have done it at clone "
+      "time.\n"
+      "\n"
+      "Already have an MO2 checkout elsewhere -- from mob, for instance? Use it "
+      "instead of cloning twice:\n"
+      "  cmake --preset vs2026 -DMO2_SOURCE_ROOT=<path to the directory holding uibase>")
+  endif()
+
   message(FATAL_ERROR
     "MO2_SOURCE_ROOT does not look like an MO2 checkout: ${MO2_SOURCE_ROOT}\n"
     "Expected to find uibase/CMakeLists.txt under it. Set -DMO2_SOURCE_ROOT=<path>.")
@@ -229,10 +251,7 @@ if(NOT MO2_QT_DIR)
     "Already have Qt elsewhere? Point at it instead:\n"
     "  cmake --preset vs2026 -DMO2_QT_DIR=<prefix>   (or set QTDIR)\n"
     "\n"
-    # Three paths reach this error and only one of them has the option off, so
-    # the sentence has to be conditional. Stating "MO2_AUTO_INSTALL_QT is OFF"
-    # unconditionally was false in exactly the two cases a real user hits: the
-    # download was attempted and failed, or no Python was found to run it.
+    # Conditional: three paths reach this error and only one has the option off.
     "${_mo2_qt_auto_hint}")
 endif()
 
@@ -315,13 +334,20 @@ if(NOT EXISTS "${_mo2_usvfs_stamp}")
 
     message(STATUS "[MO2] building usvfs (${_arch}) -- first configure only")
 
+    # Only pass -T when there is a toolset. Configuring without the preset leaves
+    # CMAKE_GENERATOR_TOOLSET empty, and `-T ""` is not the same as omitting it.
+    set(_usvfs_toolset "")
+    if(CMAKE_GENERATOR_TOOLSET)
+      set(_usvfs_toolset -T "${CMAKE_GENERATOR_TOOLSET}")
+    endif()
+
     execute_process(
       COMMAND "${CMAKE_COMMAND}"
         -S "${MO2_SOURCE_ROOT}/usvfs"
         -B "${CMAKE_BINARY_DIR}/usvfs-${_arch}"
         -G "${CMAKE_GENERATOR}"
         -A "${_arch}"
-        -T "${CMAKE_GENERATOR_TOOLSET}"
+        ${_usvfs_toolset}
         "-DCMAKE_TOOLCHAIN_FILE=${CMAKE_TOOLCHAIN_FILE}"
         "-DVCPKG_TARGET_TRIPLET=${_triplet}"
         "-DCMAKE_INSTALL_PREFIX=${MO2_USVFS_PREFIX}"
@@ -442,7 +468,9 @@ endif()
 
 # Every release in mob's table has an empty top_level_folder, so each extracted
 # directory's contents go FLAT into bin/stylesheets with nothing stripped.
-file(GLOB _mo2_ss_releases "${MO2_STYLESHEETS_DIR}/*")
+# CONFIGURE_DEPENDS so adding a stylesheet release is picked up by the next build
+# rather than silently ignored until somebody happens to reconfigure.
+file(GLOB _mo2_ss_releases CONFIGURE_DEPENDS "${MO2_STYLESHEETS_DIR}/*")
 foreach(_ss ${_mo2_ss_releases})
   if(IS_DIRECTORY "${_ss}")
     install(DIRECTORY "${_ss}/" DESTINATION bin/stylesheets)
@@ -502,15 +530,9 @@ endif()
 # 7zip's runtime DLL, which vcpkg puts in the build tree rather than anywhere
 # CMake would find on its own.
 #
-# OPTIONAL is defensive, not load-bearing: with the triplet this project uses
-# (x64-windows-static-md) the DLL is present and does get installed. It guards
-# a triplet or feature change that stops producing it, where a hard install rule
-# would fail the install with a path nobody recognises.
-#
-# It is NOT about configure-time ordering. install() rules are *recorded* during
-# configure and *evaluated* during install, so the file's absence at configure
-# time would never have mattered -- an earlier version of this comment claimed
-# otherwise and was simply wrong about how install() works.
+# OPTIONAL is defensive, not load-bearing: under x64-windows-static-md the DLL is
+# present and does get installed. It guards a triplet change that stops producing
+# it, where a hard rule would fail the install on a path nobody recognises.
 install(FILES "${CMAKE_BINARY_DIR}/vcpkg_installed/${VCPKG_TARGET_TRIPLET}/bin/7zip.dll"
         DESTINATION bin/dlls OPTIONAL)
 

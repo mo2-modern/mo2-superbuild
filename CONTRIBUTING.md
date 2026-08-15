@@ -51,6 +51,35 @@ are no longer treated as external, so consumers compile them at `/W4 /WX` and fa
 belong to someone else's code. The error appears in a *different* repository from the one you
 changed and names nothing that points back here.
 
+## Bumping a pinned version
+
+Almost everything this project fetches is pinned, and several pins move in pairs. Changing one
+without the other fails in ways that do not name the cause.
+
+| What | Where | Moves with |
+|---|---|---|
+| Qt | `MO2_QT_VERSION`, `MO2_QT_ARCH` in `CMakeLists.txt` | Re-check `MO2_QT_MODULES` and `qt_vs` ([ADR-005](docs/DECISIONS.md#adr-005), [ADR-006](docs/DECISIONS.md#adr-006)). CI derives its cache key from these — do not repeat them in the workflow |
+| `aqtinstall` | `MO2_AQTINSTALL_COMMIT` | A commit, not a tag, because releases lag Qt's repository layout. Re-run a real Qt install after changing it |
+| Explorer++ | `MO2_EXPLORERPP_VERSION` | **`MO2_EXPLORERPP_SHA256` must change with it** |
+| Stylesheets | the `_mo2_stylesheets` table | Each row carries its own SHA256; version and hash move together |
+| vcpkg | the submodule commit **and** the baselines in `vcpkg.json` | Plus the baseline in all 33 repo manifests — see [ADR-013](docs/DECISIONS.md#adr-013) |
+
+To get a new hash, let the build fetch the file and hash what it downloaded:
+
+```powershell
+(Get-FileHash build\prebuilt\<archive> -Algorithm SHA256).Hash.ToLower()
+```
+
+A mismatch is meant to stop the build. If a hash fails on a version you did **not** change, do not
+paper over it — an upstream tag was re-pushed at different bytes, and that is the situation the
+hashes exist to catch.
+
+**Changed `usvfs`?** It is built at configure time and skipped afterwards. Force a rebuild by
+deleting `build/usvfs-install` (the stamp file inside it is the guard).
+
+**One toolchain variable at a time.** [ADR-003](docs/DECISIONS.md#adr-003): do not bump Qt, MSVC and
+Python together, or a regression cannot be attributed.
+
 ## Building and verifying
 
 Build instructions are in the [README](README.md); machine setup, troubleshooting and the
@@ -59,6 +88,15 @@ verification recipe are in [BUILD.md](docs/BUILD.md).
 **A green build is not a verification.** In particular, a build alone deploys nothing — install is a
 separate step ([ADR-023](docs/DECISIONS.md#adr-023)) — and a launch proves usvfs *loads*, not that
 it hooks anything. Read [TRAPS.md](docs/TRAPS.md#verification) before claiming something works.
+
+⚠️ **Do not expect CI to check your pull request.** The workflow needs a `windows-2025-vs2026`
+runner, which is not a standard GitHub-hosted label, so a PR from a fork will queue forever rather
+than fail visibly. It also does not run on `push`. Verify locally and say what you verified.
+
+**There are no automated tests.** `uibase`, `bsapacker` and `plugin_python` each ship a `tests/`
+directory, but they are gated on `BUILD_TESTING` and enabling it needs `gtest` in the root
+`vcpkg.json` — see [BUILD.md](docs/BUILD.md#verification). Until that changes, the only mechanical
+check is the CI install-tree verification, and everything else is manual.
 
 ## Commits
 

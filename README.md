@@ -62,6 +62,11 @@ Both routes produce `install/bin/ModOrganizer.exe`.
 > installing is not an error — it just means the install tree still holds whatever was last deployed
 > there. See [ADR-023](docs/DECISIONS.md#adr-023).
 
+> **Use RelWithDebInfo.** It is what MO2 ships and the only configuration this tree is built and
+> verified in. The IDE will offer Debug, but `usvfs` is built as RelWithDebInfo regardless and the
+> vcpkg runtime DLLs are installed from the release tree, so a Debug build mixes configurations.
+> Debug builds are not blocked; they are simply not supported or tested.
+
 `install/` and `build/` are in `.gitignore`, so Visual Studio's Folder View hides them by default.
 Use **Show All Files** in the Solution Explorer toolbar if you want to browse the output.
 
