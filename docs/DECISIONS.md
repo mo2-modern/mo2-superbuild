@@ -35,6 +35,8 @@ verify) and several decisions look wrong without it.
 | [020](#adr-020) | Boost → std: **cut from scope** | **Accepted — cut** |
 | [021](#adr-021) | C++23: raise the six standalone repos in place | **Accepted — done** |
 | [022](#adr-022) | Documentation is split by content **lifetime** | Accepted |
+| [023](#adr-023) | Build and install stay **separate steps** | Accepted — supersedes a same-day decision |
+| [024](#adr-024) | Configure downloads Qt; `MO2_QT_MODULES` is the only copy of the list | Accepted |
 
 ---
 

@@ -22,7 +22,7 @@ is one project to open and one button to press. Nothing in the 34 upstream repos
 | Visual Studio 2026, v145 toolset | The C++/CLI plugins require MSBuild; no Ninja-only setup can build them. `.vsconfig` lists the components to select. |
 | Python 3.14, with development headers | Use the python.org installer. CMake locates it through the registry, not `PATH`. |
 | Git, on `PATH` | Used to clone, and again during configure to fetch the Qt installer. |
-| ~25 GB free disk space | Qt is 3.3 GB; vcpkg packages, usvfs build trees and the output account for the rest. |
+| ~25 GB free disk space | Qt is 3.3 GB; vcpkg packages, usvfs build trees and the output account for the rest. **Roughly 3 GB of it goes to `%LOCALAPPDATA%\vcpkg`, not to the drive you cloned to** — vcpkg's build trees, packages and downloads are redirected there to keep them out of the workspace. |
 
 Qt, vcpkg, and every third-party dependency are downloaded automatically. A standalone CMake is not
 required — the build uses the one Visual Studio ships.
@@ -133,10 +133,10 @@ sections as background.
 All 33 buildable repositories compile at 0 errors and 0 warnings. (`repos/` holds 34 submodules;
 `cmake_common` is CMake modules, consumed rather than built.)
 
-Last verified 2026-08-15 from a cold tree, with no `build/`, `qt/` or `install/` present, running
-only a configure and a build: Qt downloaded, configure and build clean, 471 translation units, 46
-projects linked, install tree populated by the build, and `ModOrganizer.exe` reaching its first-run
-window with usvfs, uibase and the Qt runtime loaded from `install/`.
+Last verified 2026-08-15 from a cold tree, with no `build/`, `qt/` or `install/` present, running a
+configure, a build and an install: Qt downloaded automatically, configure and build clean at 0
+errors and 0 warnings, 471 translation units, 46 projects linked, and `ModOrganizer.exe` reaching
+its first-run window with usvfs, uibase and the Qt runtime loaded from `install/`.
 
 That exercise does not cover usvfs *hooking*, which requires launching a game through MO2 and
 reading the result out of the instance log. See [TRAPS.md](docs/TRAPS.md#verification).

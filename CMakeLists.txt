@@ -1,7 +1,15 @@
 # MO2 superbuild -- see README.md to build it, docs/DECISIONS.md for why it is
 # shaped this way.
 #
-# This file adds all 33 buildable MO2 repositories as subdirectories. It edits
+# Copyright (C) 2026 Leo Schlosser
+# SPDX-License-Identifier: GPL-3.0-or-later
+#
+# This covers the superbuild only. The projects under repos/ carry their own
+# copyright and licences, and the third-party texts shipped with a build are
+# vendored in licenses/.
+#
+# This file assembles the 33 buildable MO2 repositories -- 32 as subdirectories,
+# plus usvfs, which cannot be one and is built at configure time below. It edits
 # none of them, because every edited line is merge surface on sync (ADR-001), so
 # their 64 find_package(mo2-*) calls -- which normally each require a prior
 # install -- have to be satisfied from outside. Three ways:
@@ -282,10 +290,24 @@ endforeach()
 # which cannot affect any include path.
 set(MO2_USVFS_PREFIX "${CMAKE_BINARY_DIR}/usvfs-install")
 
-# usvfs writes usvfsConfig.cmake, NOT usvfs-config.cmake. find_package accepts
-# either spelling, so getting this wrong does not break resolution -- it breaks
-# the guard silently, and usvfs is rebuilt from scratch on every configure.
-if(NOT EXISTS "${MO2_USVFS_PREFIX}/lib/cmake/usvfs/usvfsConfig.cmake")
+# The guard is a stamp this file writes after BOTH passes, and it has to be.
+#
+# The obvious candidate -- usvfsConfig.cmake, which usvfs installs -- is written
+# by whichever pass runs, so it exists as soon as Win32 finishes. If x64 then
+# fails for any reason, the FATAL_ERROR below is correct but the next configure
+# sees that file, skips the whole loop, and dies later inside
+# find_package(usvfs) on a missing usvfs_x64Targets.cmake -- a path nobody
+# created, with nothing pointing at `build/usvfs-install` as the thing to delete.
+# usvfs's own config includes BOTH usvfs_x86Targets.cmake and
+# usvfs_x64Targets.cmake (repos/usvfs/cmake/config.cmake.in), so a half-built
+# prefix is worse than none.
+#
+# Note for anyone tempted to guard on the config file anyway: usvfs writes
+# usvfsConfig.cmake, not usvfs-config.cmake, and find_package accepts either
+# spelling -- so that mistake does not break resolution, it silently rebuilds
+# usvfs on every configure.
+set(_mo2_usvfs_stamp "${MO2_USVFS_PREFIX}/.mo2-usvfs-complete")
+if(NOT EXISTS "${_mo2_usvfs_stamp}")
   foreach(_pair "Win32:x86-windows-static-md" "x64:x64-windows-static-md")
     string(REPLACE ":" ";" _pair "${_pair}")
     list(GET _pair 0 _arch)
@@ -303,6 +325,10 @@ if(NOT EXISTS "${MO2_USVFS_PREFIX}/lib/cmake/usvfs/usvfsConfig.cmake")
         "-DCMAKE_TOOLCHAIN_FILE=${CMAKE_TOOLCHAIN_FILE}"
         "-DVCPKG_TARGET_TRIPLET=${_triplet}"
         "-DCMAKE_INSTALL_PREFIX=${MO2_USVFS_PREFIX}"
+        # Without this the nested builds ignore the preset's scratch redirection
+        # and drop vcpkg buildtrees, packages and downloads inside vcpkg/ in the
+        # workspace -- and these two are the largest consumers in the project.
+        "-DVCPKG_INSTALL_OPTIONS=${VCPKG_INSTALL_OPTIONS}"
       RESULT_VARIABLE _usvfs_configure
       OUTPUT_VARIABLE _usvfs_out ERROR_VARIABLE _usvfs_out)
     if(NOT _usvfs_configure EQUAL 0)
@@ -318,6 +344,11 @@ if(NOT EXISTS "${MO2_USVFS_PREFIX}/lib/cmake/usvfs/usvfsConfig.cmake")
       message(FATAL_ERROR "usvfs ${_arch} build failed:\n${_usvfs_out}")
     endif()
   endforeach()
+
+  # Only now is the prefix usable by find_package(usvfs).
+  file(WRITE "${_mo2_usvfs_stamp}"
+       "usvfs Win32 and x64 built and installed by the superbuild.\n"
+       "Delete this file (or the whole usvfs-install directory) to force a rebuild.\n")
 endif()
 
 list(APPEND CMAKE_PREFIX_PATH "${MO2_USVFS_PREFIX}")
@@ -506,10 +537,18 @@ endfunction()
 #
 # Marking these SYSTEM restores parity. It does NOT hide warnings in the
 # library's own build: uibase is still compiled at /W4 /WX by its own project.
+# Fatal on a missing target, not silent. If an upstream rename makes this a no-op,
+# the symptom is a wall of warnings-as-errors inside somebody else's public headers,
+# in a different repository, naming nothing that leads back here.
 function(mo2_mark_package_target target)
-  if(TARGET ${target})
-    set_target_properties(${target} PROPERTIES SYSTEM TRUE)
+  if(NOT TARGET ${target})
+    message(FATAL_ERROR
+      "[MO2] no target '${target}' to mark SYSTEM. It is consumed through a "
+      "find_package redirect, so leaving it unmarked makes consumers compile its "
+      "public headers at /W4 /WX. If the target was renamed upstream, update the "
+      "list beside mo2_mark_package_target in CMakeLists.txt.")
   endif()
+  set_target_properties(${target} PROPERTIES SYSTEM TRUE)
 endfunction()
 
 # Order is dependency order, derived from the find_package(mo2-*) calls in each
@@ -523,7 +562,7 @@ mo2_add_repo(bsatk)
 mo2_add_repo(lootcli)
 mo2_add_repo(helper)
 
-# --- uibase: 23 of the 63 find_package sites want it, and every plugin does ---
+# --- uibase: 23 of the 64 find_package sites want it, and every plugin does ---
 mo2_add_repo(uibase)
 
 # Every target consumed through a find_package redirect, marked SYSTEM so

@@ -8,16 +8,18 @@ For *how to build it*, see [BUILD.md](BUILD.md). For *why* any of it is shaped t
 
 ## Two trees
 
-**This repository** is the superbuild: one CMake project that builds all 34 MO2 repositories. It
-holds no sources of its own. The repositories arrive as submodules under `repos/`, vcpkg under
-`vcpkg/`.
+**This repository** is the superbuild. It holds no sources of its own: the repositories arrive as
+submodules under `repos/`, vcpkg under `vcpkg/`.
 
-**The mob working tree** is separate and is not published. It holds mob, its own checkout of the 34
-repositories under `build/build/`, Qt, and the `tidy/` side trees clangd uses. It is what produces
-`build\install`. Sections below that mention `build/build/`, `mob.ini` or `env.ps1` describe that
-tree, not this repository.
+**The mob working tree** is separate and is not published. It holds mob, its own checkout of the
+repositories under `build/build/`, Qt, and the `tidy/` side trees clangd uses. Sections below that
+mention `build/build/`, `mob.ini` or `env.ps1` describe that tree, not this repository.
 
-Both paths build the same 34 repositories and both are kept green.
+> **"34" means three different things in older notes; here it means one.** `repos/` holds **34
+> submodules**. **33** of them are buildable — `cmake_common` is CMake modules, consumed rather than
+> built. Of those 33, **32** are added as subdirectories and `usvfs` is built separately at
+> configure time. `mob` itself is **not** in `repos/` at all. Where a document says "34
+> repositories build", it is wrong: 33 do.
 
 ---
 
@@ -27,7 +29,7 @@ Both paths build the same 34 repositories and both are kept green.
 |---|---|---|
 | Visual Studio | **2026** (18.x, Community) | generator `Visual Studio 18 2026`; VS2022 kept as fallback |
 | MSVC toolset | **v145** (14.51) | ABI-compatible with all of 14.x — [ADR-005](DECISIONS.md#adr-005) |
-| CMake | **4.4.2** standalone | first on PATH, ahead of VS's bundled 4.3.1 — [ADR-004](DECISIONS.md#adr-004) |
+| CMake | **4.4.2** standalone *for mob* | [ADR-004](DECISIONS.md#adr-004). **The superbuild does not need it** — it requires 3.25 and is built with the CMake Visual Studio ships (4.3.1). Only the mob path wants 4.4.2 first on `PATH` |
 | Qt | **6.11.1** `msvc2022_64` | via `aqtinstall` from git; 3.3 GB; `qt_vs` stays `2022` |
 | Python (build) | **3.14** | found by CMake through the registry, not PATH |
 | Python (tooling) | **3.14** | `aqt`, `pre-commit` — always `py -3.14 -m <tool>` |

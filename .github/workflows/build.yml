@@ -173,16 +173,18 @@ jobs:
           }
 
           $stylesheets = @(Get-ChildItem 'install/bin/stylesheets' -ErrorAction SilentlyContinue)
-          if ($stylesheets.Count -lt 1) { $errors += 'no stylesheets were deployed' }
+          # 29 entries, from the 9 releases in the stylesheet table. Asserting >= 1
+          # on a quantity that is known would pass with 28 of them missing.
+          if ($stylesheets.Count -lt 29) { $errors += "expected 29 deployed stylesheet entries, found $($stylesheets.Count)" }
 
           $licenses = @(Get-ChildItem 'install/bin/licenses' -ErrorAction SilentlyContinue)
-          if ($licenses.Count -lt 1) { $errors += 'no third-party licence texts were deployed' }
+          if ($licenses.Count -lt 18) { $errors += "expected 18 third-party licence texts, found $($licenses.Count)" }
 
           if ($errors) {
             $errors | ForEach-Object { Write-Host "::error::$_" }
             throw "The install tree is incomplete; $($errors.Count) check(s) failed."
           }
-          Write-Host "Install tree verified: $($plugins.Count) plugins, $($img.Count) image plugins, $($stylesheets.Count) stylesheet releases."
+          Write-Host "Install tree verified: $($plugins.Count) plugins, $($img.Count) image plugins, $($stylesheets.Count) stylesheet entries, $($licenses.Count) licence texts."
 
       - uses: actions/upload-artifact@v7
         with:
