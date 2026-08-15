@@ -154,6 +154,11 @@ that drifted apart.
 
 [GPL-3.0](LICENSE), matching Mod Organizer 2 itself.
 
-This repository contains no MO2 source — the repositories under `repos/` carry their own licences,
+**No copyright notice is asserted, deliberately.** Authorship is recorded in the git history and
+that is considered sufficient here; nobody is staking a personal claim over what is intended as
+open source. Note that this is a choice rather than an oversight — reviewers tend to flag a GPL text
+with no named licensor, because the licence is formally granted *by* a copyright holder.
+
+This repository contains no MO2 source. The repositories under `repos/` carry their own licences,
 and the third-party texts redistributed with a build are vendored in [`licenses/`](licenses/) and
 installed alongside the application.

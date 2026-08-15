@@ -1,11 +1,11 @@
 # MO2 superbuild -- see README.md to build it, docs/DECISIONS.md for why it is
 # shaped this way.
 #
-# Copyright (C) 2026 Leo Schlosser
 # SPDX-License-Identifier: GPL-3.0-or-later
 #
-# This covers the superbuild only. The projects under repos/ carry their own
-# copyright and licences, and the third-party texts shipped with a build are
+# No copyright notice by deliberate choice -- see the License section of
+# README.md. This covers the superbuild only: the projects under repos/ carry
+# their own licences, and the third-party texts shipped with a build are
 # vendored in licenses/.
 #
 # This file assembles the 33 buildable MO2 repositories -- 32 as subdirectories,
