@@ -1,3 +1,4 @@
+claude.md
 # Build output ---------------------------------------------------------------
 # `build/` is this project's binaryDir and `install/` its CMAKE_INSTALL_PREFIX,
 # both set in CMakePresets.json. Everything generated lands in one of the two.
