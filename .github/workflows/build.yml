@@ -61,6 +61,10 @@ jobs:
       - uses: actions/checkout@v7
         with:
           submodules: recursive
+          # Full history, not the default depth-1: the release notes derive their
+          # changelog from `git log <previous tag>..HEAD`, and a shallow clone has
+          # neither the tags nor the commits to compare against.
+          fetch-depth: 0
 
       # The tag does NOT define the version -- version.rc does. This step exists so
       # that a mistyped tag fails here rather than producing artifacts named after a
@@ -311,6 +315,25 @@ jobs:
             "**This is not an official Mod Organizer 2 release.** Report problems here, not to upstream."
             ""
             "Built from source by [mo2-superbuild](https://github.com/${{ github.repository }}) on VS2026 / v145 / Qt 6.11.1 / Python 3.14."
+            ""
+            "### Changes"
+            ""
+          )
+
+          # Derived from git, not written by hand, so it cannot drift from what
+          # shipped. Defensive on purpose: if the previous tag cannot be resolved
+          # this degrades to a pointer at the compare view rather than failing the
+          # release after a 40-minute build.
+          $prev = git describe --tags --abbrev=0 "${{ github.ref_name }}^" 2>$null
+          if ($LASTEXITCODE -eq 0 -and $prev) {
+            $notes += git log --no-merges --format="- %s" "$prev..${{ github.ref_name }}"
+            $notes += ""
+            $notes += "[Full diff since $prev](https://github.com/${{ github.repository }}/compare/$prev...${{ github.ref_name }})"
+          } else {
+            $notes += "- see the commit history"
+          }
+
+          $notes += @(
             ""
             "### Downloads"
             ""
