@@ -1,5 +1,7 @@
 # Mod Organizer 2 — Superbuild
 
+[![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
+
 One CMake project that builds all of Mod Organizer 2 from source. Clone it, open the folder in your
 IDE, press build, and get a working `ModOrganizer.exe`.
 
@@ -150,8 +152,8 @@ that drifted apart.
 
 ## License
 
-Mod Organizer 2 is GPL-3.0. Third-party license texts redistributed with the build are vendored in
-[`licenses/`](licenses/) and installed alongside the application.
+[GPL-3.0](LICENSE), matching Mod Organizer 2 itself.
 
-> **This repository does not yet carry a license file of its own.** Until it does, the superbuild's
-> own CMake and documentation are unlicensed. See [issue tracker](https://github.com/mo2-modern/mo2-superbuild/issues).
+This repository contains no MO2 source — the repositories under `repos/` carry their own licences,
+and the third-party texts redistributed with a build are vendored in [`licenses/`](licenses/) and
+installed alongside the application.
