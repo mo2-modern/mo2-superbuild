@@ -91,8 +91,13 @@ settings.
 
 ## How it works
 
-The repositories are submodules under `repos/`. This project holds no sources of its own and writes
-nothing into them; everything it produces lands in `build/` and `install/`.
+The repositories are submodules under `repos/`. This project holds no sources of its own, and
+everything it produces lands in `build/` and `install/`.
+
+One exception, and it is upstream's rather than this project's: `mo2_add_translations` runs
+`lupdate`, which rewrites each repository's `*_en.ts` **in place**. A first build therefore leaves
+25 submodules showing as modified. It is line-number churn, not damage — clear it with
+`git -C repos/<name> checkout -- .` and do not commit it.
 
 The problem a superbuild has to solve here is that the upstream repositories locate each other with
 64 `find_package(mo2-*)` calls, which normally require a prior `install`. Editing those calls would

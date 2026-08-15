@@ -62,7 +62,7 @@ without the other fails in ways that do not name the cause.
 | `aqtinstall` | `MO2_AQTINSTALL_COMMIT` | A commit, not a tag, because releases lag Qt's repository layout. Re-run a real Qt install after changing it |
 | Explorer++ | `MO2_EXPLORERPP_VERSION` | **`MO2_EXPLORERPP_SHA256` must change with it** |
 | Stylesheets | the `_mo2_stylesheets` table | Each row carries its own SHA256; version and hash move together |
-| vcpkg | the submodule commit **and** the baselines in `vcpkg.json` | Plus the baseline in all 33 repo manifests — see [ADR-013](docs/DECISIONS.md#adr-013) |
+| vcpkg | the submodule commit **and** the baselines in `vcpkg.json` | Plus the baseline in the 31 repo manifests that exist — see [ADR-013](docs/DECISIONS.md#adr-013) |
 
 To get a new hash, let the build fetch the file and hash what it downloaded:
 

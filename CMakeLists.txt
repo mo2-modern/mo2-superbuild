@@ -41,13 +41,15 @@ endif()
 project(mo2 LANGUAGES CXX)
 
 # --- where the repositories live ----------------------------------------------
-# The 33 repositories are submodules under repos/, so `git clone --recursive`
+# The 34 repositories are submodules under repos/, so `git clone --recursive`
 # gives a complete checkout. If they have not been initialised, fall back to a
 # sibling mo2-modern tree, which is what a machine that used mob already has --
 # there is no reason to make someone clone several GB twice.
 #
-# Point this anywhere; nothing else in this file assumes a location, and no file
-# is ever written inside it.
+# Point this anywhere; nothing else in this file assumes a location. This project
+# writes nothing into it -- but note that the BUILD does: mo2_add_translations
+# runs lupdate, which rewrites each repository's *_en.ts in place. See
+# docs/TRAPS.md.
 if(EXISTS "${CMAKE_CURRENT_LIST_DIR}/repos/uibase/CMakeLists.txt")
   set(_mo2_default_root "${CMAKE_CURRENT_LIST_DIR}/repos")
 else()
@@ -139,7 +141,7 @@ endif()
 # Rendered from MO2_QT_MODULES so the printed fallback cannot drift from what runs.
 string(JOIN " " _mo2_qt_modules_text ${MO2_QT_MODULES})
 set(_mo2_qt_manual_instructions
-  "  py -3 -m pip install git+https://github.com/miurahr/aqtinstall\n"
+  "  py -3 -m pip install git+https://github.com/miurahr/aqtinstall@${MO2_AQTINSTALL_COMMIT}\n"
   "  py -3 -m aqt install-qt windows desktop ${MO2_QT_VERSION} win64_${MO2_QT_ARCH} \\\n"
   "      -m ${_mo2_qt_modules_text} \\\n"
   "      -O \"${CMAKE_CURRENT_LIST_DIR}/qt\"\n")
@@ -258,6 +260,33 @@ endif()
 message(STATUS "[MO2] Qt: ${MO2_QT_DIR}")
 list(APPEND CMAKE_PREFIX_PATH "${MO2_QT_DIR}")
 
+# --- Python, checked here rather than where it is needed --------------------------
+# cmake_common pins MO2_PYTHON_VERSION and plugin_python asks for it EXACT, with the
+# Development component. Without this check the failure lands inside plugin_python,
+# most of the way through a first configure, as a generic "Could NOT find Python"
+# that names neither the required version nor the fact that CMake looks in the
+# registry rather than on PATH. Everything else expensive is preflighted; this was
+# the gap.
+set(MO2_PYTHON_VERSION "3.14" CACHE STRING "Python the build requires; must match cmake_common")
+find_package(Python ${MO2_PYTHON_VERSION} EXACT QUIET
+             COMPONENTS Interpreter Development.Module Development.Embed)
+if(NOT Python_FOUND)
+  message(FATAL_ERROR
+    "Python ${MO2_PYTHON_VERSION} was not found, or was found without its development files.\n"
+    "\n"
+    "plugin_python requires it EXACTly, with headers and an import library --\n"
+    "include/Python.h and libs/python<ver>.lib. Install it from python.org; the\n"
+    "embeddable package and some Store builds ship neither.\n"
+    "\n"
+    "CMake finds this through the REGISTRY, not PATH, so a Python that runs in your\n"
+    "shell is not necessarily one CMake can see. Check with:\n"
+    "  reg query HKCU\\Software\\Python\\PythonCore\n"
+    "\n"
+    "Have it somewhere CMake cannot find? Point at it:\n"
+    "  cmake --preset vs2026 -DPython_ROOT_DIR=<prefix>")
+endif()
+message(STATUS "[MO2] Python: ${Python_EXECUTABLE}")
+
 # --- resolve mo2-cmake from source, no install required ------------------------
 list(APPEND CMAKE_PREFIX_PATH "${MO2_SOURCE_ROOT}/cmake_common")
 
@@ -325,8 +354,28 @@ set(MO2_USVFS_PREFIX "${CMAKE_BINARY_DIR}/usvfs-install")
 # usvfsConfig.cmake, not usvfs-config.cmake, and find_package accepts either
 # spelling -- so that mistake does not break resolution, it silently rebuilds
 # usvfs on every configure.
+# The stamp records WHAT built usvfs, not merely that something did. Existence
+# alone would silently reuse a v145 usvfs -- the DLL-injection component, injected
+# into every game process -- inside a v146 build after a toolset change, with no
+# error anywhere. The CI cache key already carries the toolset for exactly this
+# reason; this is the same rule applied locally.
 set(_mo2_usvfs_stamp "${MO2_USVFS_PREFIX}/.mo2-usvfs-complete")
-if(NOT EXISTS "${_mo2_usvfs_stamp}")
+set(_mo2_usvfs_id
+    "generator=${CMAKE_GENERATOR}\ntoolset=${CMAKE_GENERATOR_TOOLSET}\n"
+    "triplets=x86-windows-static-md,x64-windows-static-md\nconfig=RelWithDebInfo\n")
+string(REPLACE ";" "" _mo2_usvfs_id "${_mo2_usvfs_id}")
+
+set(_mo2_usvfs_stale TRUE)
+if(EXISTS "${_mo2_usvfs_stamp}")
+  file(READ "${_mo2_usvfs_stamp}" _mo2_usvfs_prev)
+  if(_mo2_usvfs_prev STREQUAL "${_mo2_usvfs_id}")
+    set(_mo2_usvfs_stale FALSE)
+  else()
+    message(STATUS "[MO2] usvfs was built with a different toolchain -- rebuilding")
+  endif()
+endif()
+
+if(_mo2_usvfs_stale)
   foreach(_pair "Win32:x86-windows-static-md" "x64:x64-windows-static-md")
     string(REPLACE ":" ";" _pair "${_pair}")
     list(GET _pair 0 _arch)
@@ -371,10 +420,9 @@ if(NOT EXISTS "${_mo2_usvfs_stamp}")
     endif()
   endforeach()
 
-  # Only now is the prefix usable by find_package(usvfs).
-  file(WRITE "${_mo2_usvfs_stamp}"
-       "usvfs Win32 and x64 built and installed by the superbuild.\n"
-       "Delete this file (or the whole usvfs-install directory) to force a rebuild.\n")
+  # Only now is the prefix usable by find_package(usvfs), and only for this
+  # toolchain -- the contents are what the guard above compares against.
+  file(WRITE "${_mo2_usvfs_stamp}" "${_mo2_usvfs_id}")
 endif()
 
 list(APPEND CMAKE_PREFIX_PATH "${MO2_USVFS_PREFIX}")

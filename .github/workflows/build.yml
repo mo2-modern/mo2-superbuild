@@ -1,11 +1,20 @@
 name: Build MO2
 
-# One workflow for the whole project. The 33 per-repo build.yml files each drive
-# mob through ModOrganizer2/build-with-mob-action@master, which builds against
-# UPSTREAM's mob rather than our fork -- so they cannot verify this tree without
-# that action being forked first. The superbuild has no such dependency: clone,
-# configure, build. It also proves something per-repo CI never does, that the 34
-# repositories build *together* at the commits the gitlinks name.
+# One workflow for the whole project. Of the per-repo workflows, 24 are named
+# build.yml and 18 drive mob through ModOrganizer2/build-with-mob-action@master,
+# which builds against UPSTREAM's mob rather than our fork -- so they cannot
+# verify this tree without that action being forked first. This one has no such
+# dependency: clone, configure, build, install, verify. It is intended to prove
+# something per-repo CI never does, that the repositories build *together* at the
+# commits the gitlinks name.
+#
+# 🔴 IT HAS NEVER PROVEN THAT, because it has never run. `runs-on` below is not a
+# GitHub-hosted label, so without a self-hosted runner of that name a job queues
+# forever instead of failing visibly, and the triggers exclude `push` -- so no
+# commit on main has ever been checked. Treat every "verified in CI" claim about
+# this project as unsupported until either a runner exists or the label is
+# changed to one that does. An unexecutable workflow is worse than none: it
+# launders unverified claims.
 
 on:
   pull_request:
@@ -60,10 +69,11 @@ jobs:
       # dependency set the main build never needs. Locally that is 1.9 GB of
       # build trees producing an 83 MB install.
       #
-      # The skip-guard is the existence of usvfs-install/lib/cmake/usvfs/
-      # usvfsConfig.cmake in the build tree, so a fresh runner always misses it
-      # and pays the cost on every single run, unlike vcpkg whose cost the cache
-      # above removes.
+      # The skip-guard is build/usvfs-install/.mo2-usvfs-complete, whose CONTENTS
+      # record the generator, toolset and triplets that produced it -- so a
+      # restore across a toolchain change rebuilds rather than being reused
+      # silently. A fresh runner misses it and pays the cost on every run, unlike
+      # vcpkg whose cost the cache above removes.
       #
       # The key is the usvfs gitlink itself, so it changes exactly when usvfs
       # does. It must also carry the toolset and image: the guard tests only that
@@ -165,7 +175,7 @@ jobs:
           if ($exe -and $exe.Length -lt 1MB) { $errors += "ModOrganizer.exe is implausibly small ($($exe.Length) bytes)" }
 
           $plugins = @(Get-ChildItem 'install/bin/plugins' -Filter *.dll -ErrorAction SilentlyContinue)
-          if ($plugins.Count -lt 20) { $errors += "expected 20+ MO2 plugins, found $($plugins.Count)" }
+          if ($plugins.Count -lt 30) { $errors += "expected 30 MO2 plugins, found $($plugins.Count)" }
 
           $img = @(Get-ChildItem 'install/bin/dlls/imageformats' -Filter *.dll -ErrorAction SilentlyContinue)
           if ($img.Count -lt 9) {

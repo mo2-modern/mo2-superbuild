@@ -56,7 +56,7 @@ instead.
 
 ## Repository model
 
-**34 repos**: 33 MO2 repos plus `mob`, all forked into the
+**35 forked projects**: the 34 submodules under `repos/` plus `mob`, all forked into the
 [`mo2-modern`](https://github.com/mo2-modern) org, tracking `ModOrganizer2/*`.
 
 Two permanent branches per repo — see [ADR-001](DECISIONS.md#adr-001):
@@ -169,7 +169,7 @@ configure.
 It is also the reason **a green build is never sufficient verification** — see
 [BUILD.md](BUILD.md#verification).
 
-**`cmake_common` exports CMake *modules*, not targets.** 27 of the 63 `find_package(mo2-*)` call
+**`cmake_common` exports CMake *modules*, not targets.** 28 of the 64 `find_package(mo2-*)` call
 sites depend on it, and `if(NOT TARGET …)` cannot guard a module package — see
 [ADR-017](DECISIONS.md#adr-017).
 
@@ -183,10 +183,11 @@ sites depend on it, and `if(NOT TARGET …)` cannot guard a module package — s
 Dependencies resolve through **`mo2-modern/vcpkg-registry`** — ours, and we publish to it.
 
 Baselines are unified at **2 registries, both at HEAD** (from 13 baselines spanning 2024-07 →
-2026-06): `microsoft/vcpkg` → `ea1a7396`, `mo2-modern/vcpkg-registry` → `1316300c`. The local vcpkg
+2026-06): `microsoft/vcpkg` → `ea1a7396`, `mo2-modern/vcpkg-registry` → `a71daa87`. The local vcpkg
 clone sits on the same microsoft commit so tool and ports share one tree state.
 
-⚠️ **Every registry change forces a baseline update in all 33 repos.** That is the recurring cost of
+⚠️ **Every registry change forces a baseline update in all 31 repos that carry a manifest.**
+(`cmake_common`, `esptk` and `helper` have no `vcpkg.json`.) That is the recurring cost of
 the current design, and it is what [ADR-013](DECISIONS.md#adr-013) is about.
 
 ### Port bump recipe
@@ -202,7 +203,7 @@ Proven for `7zip` 26.01→26.02 and `libloot` 0.29.5→0.29.6.
 4. **`git commit` the ports first** — `x-add-version` hashes the committed git tree.
 5. `vcpkg.exe --x-builtin-ports-root=ports --x-builtin-registry-versions-dir=versions x-add-version <ports>`
 6. `git add versions && git commit --amend --no-edit && git push --force-with-lease`
-7. Bump the baseline in all 33 repos, rebuild.
+7. Bump the baseline in the 31 repos that carry a manifest, rebuild.
 
 **Deliberately pinned down:** `pybind11` and `spdlog` — [ADR-014](DECISIONS.md#adr-014).
 
