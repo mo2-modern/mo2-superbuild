@@ -97,6 +97,8 @@ set(MO2_QT_VERSION "6.11.1" CACHE STRING "Qt version to build against")
 set(MO2_QT_ARCH "msvc2022_64" CACHE STRING "Qt build to use; msvc2022_64 links fine against v145")
 set(MO2_QT_DIR "" CACHE PATH "Qt prefix. Auto-detected when empty")
 set(MO2_AUTO_INSTALL_QT ON CACHE BOOL "Download Qt with aqt when it cannot be found")
+set(MO2_AQTINSTALL_COMMIT "16db45a70b5905ad596941b223469bc86a56901e"
+    CACHE STRING "Commit of miurahr/aqtinstall to install Qt with")
 
 # --- the Qt module list, defined exactly ONCE -----------------------------------
 # This list used to be copy-pasted into four places: the FATAL_ERROR text below,
@@ -204,10 +206,20 @@ if(NOT MO2_QT_DIR AND MO2_AUTO_INSTALL_QT)
 
     # aqt from git, never PyPI: the released version lags Qt's repository layout
     # and fails outright on current Qt versions.
+    #
+    # Pinned to a commit, not to the default branch. Configure runs this on every
+    # fresh clone, so an unpinned `git+https://...` would execute whatever that
+    # third-party repository's HEAD happened to contain at the moment somebody
+    # cloned -- a build that is not reproducible, and an execution the project
+    # cannot vouch for. This commit is the one that demonstrably installed Qt
+    # 6.11.1 for this tree on 2026-08-15 (aqtinstall 3.3.1.dev162).
+    #
+    # Bump it deliberately, and re-run a Qt install when you do; the reason this
+    # is not on a release tag is in the paragraph above.
     execute_process(
       COMMAND "${_mo2_venv}/Scripts/python.exe" -m pip install
               --disable-pip-version-check
-              "git+https://github.com/miurahr/aqtinstall"
+              "git+https://github.com/miurahr/aqtinstall@${MO2_AQTINSTALL_COMMIT}"
       RESULT_VARIABLE _mo2_rc)
     if(NOT _mo2_rc EQUAL 0)
       message(FATAL_ERROR "[MO2] could not install aqt (needs network, and git on "
@@ -373,26 +385,44 @@ set(MO2_PREBUILT_DIR "${CMAKE_BINARY_DIR}/prebuilt"
     CACHE PATH "Where downloaded, non-buildable components are unpacked")
 set(MO2_EXPLORERPP_VERSION "1.4.0"
     CACHE STRING "Explorer++ release to ship (mob.ini: explorerpp)")
+# Hash of the archive this project downloaded and shipped on 2026-08-15. This one
+# is an EXECUTABLE that gets installed into bin/explorer++ and launched from
+# MO2's UI, which is the strongest reason in this file to pin bytes rather than a
+# URL. Update it together with MO2_EXPLORERPP_VERSION.
+set(MO2_EXPLORERPP_SHA256
+    "81ec54586dfef888b886d409afa22e31f22d4f6ba35d52d93074b4ee64b79b0c"
+    CACHE STRING "SHA256 of explorerpp_x64.zip for MO2_EXPLORERPP_VERSION")
 
 set(MO2_STYLESHEETS_DIR "${MO2_SOURCE_ROOT}/stylesheets"
     CACHE PATH "Extracted stylesheet releases; downloaded if absent")
 set(MO2_EXPLORERPP_DIR "${MO2_SOURCE_ROOT}/explorer++"
     CACHE PATH "Extracted Explorer++; downloaded if absent")
 
-# user|repo|version|archive-name -- mob's release table verbatim.
+# user|repo|version|archive-name|sha256 -- mob's release table, plus a hash.
+#
 # The separator is | and not ; on purpose: foreach() over a list of
 # semicolon-bearing strings flattens them into individual tokens, so the tuples
 # would silently come apart and produce empty URLs.
+#
+# The hashes matter because a GitHub release tag is mutable: it can be deleted
+# and re-pushed at a different commit, and nothing about the URL would change.
+# These archives are extracted into the tree MO2 ships, so an unpinned fetch
+# means the contents of a shipped build are decided by someone else's repository
+# at download time. Each hash below was taken from the archive this project
+# actually downloaded and shipped on 2026-08-15.
+#
+# When a stylesheet is updated, the hash must be updated with the version. That
+# is the point: the build should stop rather than quietly ship different bytes.
 set(_mo2_stylesheets
-  "6788-00|paper-light-and-dark|7.2|paper-light-and-dark"
-  "6788-00|paper-automata|3.2|paper-automata"
-  "6788-00|paper-mono|3.2|paper-mono"
-  "6788-00|1809-dark-mode|3.0|1809"
-  "Trosski|ModOrganizer_Style_Morrowind|1.1|Morrowind-MO2-Stylesheet"
-  "Trosski|Mod-Organizer-2-Skyrim-Stylesheet|v1.1|Skyrim-MO2-Stylesheet"
-  "Trosski|ModOrganizer_Style_Fallout3|v1.11|Fallout3-MO2-Stylesheet"
-  "Trosski|Mod-Organizer2-Fallout-4-Stylesheet|v1.11|Fallout4-MO2-Stylesheet"
-  "Trosski|Starfield_MO2_Stylesheet|V1.11|Starfield.MO2.Stylsheet")
+  "6788-00|paper-light-and-dark|7.2|paper-light-and-dark|f8399199cc8dd99d5beb121c2cbfe9a606d7238b12500b881857f2e0b93765ee"
+  "6788-00|paper-automata|3.2|paper-automata|2eaea2a11f53f762c843d15e8fe1fd5c5b138ed5a215f9aaf6eb3d8176bb84f6"
+  "6788-00|paper-mono|3.2|paper-mono|177033a7c74c4d90bb1f31d9fe327130afe1f1b8bd5eec0210ca39d7e98aeebc"
+  "6788-00|1809-dark-mode|3.0|1809|de0d858164254c3feda3c38321e2f9530dbf1e6b64f3c8747776c4539ab7b8a1"
+  "Trosski|ModOrganizer_Style_Morrowind|1.1|Morrowind-MO2-Stylesheet|e7c13960be64db22ccecc85cb4dc76152ff91bdd1f3685249a9e6658159923b1"
+  "Trosski|Mod-Organizer-2-Skyrim-Stylesheet|v1.1|Skyrim-MO2-Stylesheet|502f4680eea2bcea7a6ac53a44d3fcebe8bde16d7bd590024c238211bd947577"
+  "Trosski|ModOrganizer_Style_Fallout3|v1.11|Fallout3-MO2-Stylesheet|9b561c7b9c1cc56ef72f976702c92a7c374c1431ccb01bdd63745776376abe8c"
+  "Trosski|Mod-Organizer2-Fallout-4-Stylesheet|v1.11|Fallout4-MO2-Stylesheet|e9591268b142b41af1ca8bc31b9ed8f2f0635b894c243b0ac413822aef3c5e4e"
+  "Trosski|Starfield_MO2_Stylesheet|V1.11|Starfield.MO2.Stylsheet|257340ca4ee499422fb55ce1d2d7cc84c02cf8a76e760d0a96528154bf9b7eff")
 
 if(NOT EXISTS "${MO2_STYLESHEETS_DIR}")
   set(MO2_STYLESHEETS_DIR "${MO2_PREBUILT_DIR}/stylesheets")
@@ -402,6 +432,7 @@ if(NOT EXISTS "${MO2_STYLESHEETS_DIR}")
     list(GET _parts 1 _repo)
     list(GET _parts 2 _ver)
     list(GET _parts 3 _file)
+    list(GET _parts 4 _sha)
     # mob names the extracted directory <repo>-<version>; keep that, because the
     # install step below simply copies every release directory's contents flat.
     set(_dest "${MO2_STYLESHEETS_DIR}/${_repo}-${_ver}")
@@ -410,7 +441,8 @@ if(NOT EXISTS "${MO2_STYLESHEETS_DIR}")
       message(STATUS "[MO2] downloading stylesheet ${_repo} ${_ver}")
       file(DOWNLOAD
         "https://github.com/${_user}/${_repo}/releases/download/${_ver}/${_file}.7z"
-        "${_archive}" STATUS _dl TLS_VERIFY ON)
+        "${_archive}" STATUS _dl TLS_VERIFY ON
+        EXPECTED_HASH "SHA256=${_sha}")
       list(GET _dl 0 _dl_code)
       if(NOT _dl_code EQUAL 0)
         list(GET _dl 1 _dl_msg)
@@ -451,7 +483,8 @@ if(NOT EXISTS "${MO2_EXPLORERPP_DIR}")
     message(STATUS "[MO2] downloading Explorer++ ${MO2_EXPLORERPP_VERSION}")
     file(DOWNLOAD
       "https://download.explorerplusplus.com/stable/${MO2_EXPLORERPP_VERSION}/explorerpp_x64.zip"
-      "${_epp_zip}" STATUS _dl TLS_VERIFY ON)
+      "${_epp_zip}" STATUS _dl TLS_VERIFY ON
+      EXPECTED_HASH "SHA256=${MO2_EXPLORERPP_SHA256}")
     list(GET _dl 0 _dl_code)
     if(NOT _dl_code EQUAL 0)
       list(GET _dl 1 _dl_msg)
