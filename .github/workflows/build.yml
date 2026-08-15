@@ -16,10 +16,6 @@ on:
 # is ~112 vcpkg packages plus a full MO2 build. Turn it on once a warm cache has
 # shown the incremental cost.
 
-env:
-  MO2_QT_VERSION: "6.11.1"
-  MO2_QT_ARCH: "msvc2022_64"
-
 jobs:
   build:
     # NOT windows-2025: that image is Visual Studio Enterprise 2022 17.14 with
@@ -84,31 +80,46 @@ jobs:
           path: build/usvfs-install
           key: usvfs-${{ steps.usvfs.outputs.sha }}-v145-${{ runner.os }}-vs2026
 
-      # Qt is the one prerequisite the project cannot provide for itself: it
-      # needs WebEngine, which vcpkg would have to build Chromium for. The
-      # superbuild looks for it at ./qt/<version>/<arch>, which is exactly the
-      # layout `aqt -O qt` produces.
-      # There is deliberately NO "Install Qt" step. Configure installs Qt itself
-      # when it cannot find it (MO2_AUTO_INSTALL_QT, on by default), into exactly
-      # this directory, so all this cache has to do is make the download optional.
+      # There is deliberately no "Install Qt" step: configure downloads Qt itself
+      # when it cannot find it, into exactly this directory, so the cache below
+      # only has to make that download optional. CI therefore exercises the same
+      # acquisition path a contributor gets rather than a copy of it.
       #
-      # That is worth more than the few minutes it saves: CI now exercises the
-      # same acquisition path a contributor gets, rather than a hand-maintained
-      # copy of it. This step used to carry its own duplicate of the Qt module
-      # list -- the fourth copy in the tree -- and duplication of exactly this
-      # list is what cost four months when two modules went missing from the
-      # copies (see docs/TRAPS.md). The single copy now lives in MO2_QT_MODULES
-      # in CMakeLists.txt, and both the download and the printed instructions
-      # derive from it.
-      #
-      # A cache saved with a shorter module list would restore happily and then
-      # fail configure on a missing component, so the key still needs bumping
-      # when MO2_QT_MODULES changes.
+      # The pin is READ from CMakeLists.txt rather than repeated here. A second
+      # copy would drift, and the failure is nasty: a key built from a stale copy
+      # restores a Qt that does not match what configure then asks for, so the
+      # run dies on a directory nobody created. Hashing the module list into the
+      # key also removes the manual "remember to bump the suffix" rule that the
+      # previous version of this step relied on -- changing MO2_QT_MODULES now
+      # invalidates the cache by construction.
+      - name: Read the Qt pin from CMakeLists.txt
+        id: qt
+        shell: pwsh
+        run: |
+          $cml = Get-Content CMakeLists.txt -Raw
+          $q = [char]34
+          $ver  = [regex]::Match($cml, "set\(MO2_QT_VERSION $q([^$q]+)$q").Groups[1].Value
+          $arch = [regex]::Match($cml, "set\(MO2_QT_ARCH $q([^$q]+)$q").Groups[1].Value
+          $mods = [regex]::Match($cml, '(?s)set\(MO2_QT_MODULES(.*?)CACHE').Groups[1].Value
+          if (-not $ver -or -not $arch -or -not $mods) {
+            throw "Could not read the Qt pin from CMakeLists.txt. If those variables were renamed, update this step."
+          }
+          $sha = [Security.Cryptography.SHA256]::Create()
+          $modHash = [BitConverter]::ToString(
+            $sha.ComputeHash([Text.Encoding]::UTF8.GetBytes($mods))).Replace('-','').Substring(0,12)
+          "version=$ver"     | Out-File $env:GITHUB_OUTPUT -Append
+          "arch=$arch"       | Out-File $env:GITHUB_OUTPUT -Append
+          "modhash=$modHash" | Out-File $env:GITHUB_OUTPUT -Append
+          Write-Host "Qt $ver $arch, module-list hash $modHash"
+
       - name: Cache Qt
         uses: actions/cache@v6
         with:
           path: qt
-          key: qt-${{ env.MO2_QT_VERSION }}-${{ env.MO2_QT_ARCH }}-mods2-v2
+          # No restore-keys on purpose. A partial match would restore a Qt built
+          # from a different module list, which is precisely the silent failure
+          # this key exists to prevent.
+          key: qt-${{ steps.qt.outputs.version }}-${{ steps.qt.outputs.arch }}-${{ steps.qt.outputs.modhash }}
 
       - name: Configure
         shell: pwsh
@@ -124,7 +135,57 @@ jobs:
         shell: pwsh
         run: cmake --install build --config RelWithDebInfo
 
+      # docs/TRAPS.md: "Assert on install/bin/ModOrganizer.exe, never on the
+      # build's exit code." Without this step the workflow could not detect the
+      # failure it exists to catch -- a green build that deploys nothing --
+      # because upload-artifact warns rather than fails on an empty path.
+      #
+      # The image-plugin count is here for a different reason: a Qt installed
+      # without qtimageformats produces 4 plugins instead of 9 and nothing fails
+      # at build time. MO2 then silently cannot render TGA, TIFF or WebP mod
+      # previews. This is the only automated check in the project that can see
+      # that class of regression at all.
+      - name: Verify the install tree
+        shell: pwsh
+        run: |
+          $errors = @()
+          function Require($path, $what) {
+            if (-not (Test-Path $path)) { $script:errors += "missing $what : $path" }
+          }
+          Require 'install/bin/ModOrganizer.exe'          'the application'
+          Require 'install/bin/uibase.dll'                'uibase'
+          Require 'install/bin/usvfs_x64.dll'             'usvfs (x64)'
+          Require 'install/bin/usvfs_x86.dll'             'usvfs (x86)'
+          Require 'install/bin/usvfs_proxy_x64.exe'       'the usvfs x64 proxy'
+          Require 'install/bin/usvfs_proxy_x86.exe'       'the usvfs x86 proxy'
+          Require 'install/bin/platforms/qwindows.dll'    'the Qt platform plugin'
+          Require 'install/bin/dlls/Qt6Core.dll'          'the Qt runtime'
+
+          $exe = Get-Item 'install/bin/ModOrganizer.exe' -ErrorAction SilentlyContinue
+          if ($exe -and $exe.Length -lt 1MB) { $errors += "ModOrganizer.exe is implausibly small ($($exe.Length) bytes)" }
+
+          $plugins = @(Get-ChildItem 'install/bin/plugins' -Filter *.dll -ErrorAction SilentlyContinue)
+          if ($plugins.Count -lt 20) { $errors += "expected 20+ MO2 plugins, found $($plugins.Count)" }
+
+          $img = @(Get-ChildItem 'install/bin/dlls/imageformats' -Filter *.dll -ErrorAction SilentlyContinue)
+          if ($img.Count -lt 9) {
+            $errors += "expected 9 Qt image plugins, found $($img.Count) -- qtimageformats is probably missing from MO2_QT_MODULES"
+          }
+
+          $stylesheets = @(Get-ChildItem 'install/bin/stylesheets' -ErrorAction SilentlyContinue)
+          if ($stylesheets.Count -lt 1) { $errors += 'no stylesheets were deployed' }
+
+          $licenses = @(Get-ChildItem 'install/bin/licenses' -ErrorAction SilentlyContinue)
+          if ($licenses.Count -lt 1) { $errors += 'no third-party licence texts were deployed' }
+
+          if ($errors) {
+            $errors | ForEach-Object { Write-Host "::error::$_" }
+            throw "The install tree is incomplete; $($errors.Count) check(s) failed."
+          }
+          Write-Host "Install tree verified: $($plugins.Count) plugins, $($img.Count) image plugins, $($stylesheets.Count) stylesheet releases."
+
       - uses: actions/upload-artifact@v7
         with:
           name: ModOrganizer2
           path: install/bin
+          if-no-files-found: error
