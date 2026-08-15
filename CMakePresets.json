@@ -11,6 +11,10 @@
       "binaryDir": "${sourceDir}/build",
       "toolchainFile": "${sourceDir}/vcpkg/scripts/buildsystems/vcpkg.cmake",
       "cacheVariables": {
+        "CMAKE_CONFIGURATION_TYPES": {
+          "type": "STRING",
+          "value": "RelWithDebInfo"
+        },
         "VCPKG_TARGET_TRIPLET": {
           "type": "STRING",
           "value": "x64-windows-static-md"

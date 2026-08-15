@@ -11,14 +11,21 @@
 # This file assembles the 33 buildable MO2 repositories -- 32 as subdirectories,
 # plus usvfs, which cannot be one and is built at configure time below. It edits
 # none of them, because every edited line is merge surface on sync (ADR-001), so
-# their 64 find_package(mo2-*) calls -- which normally each require a prior
+# their 63 find_package(mo2-*) calls -- which normally each require a prior
 # install -- have to be satisfied from outside. Three ways:
 #
-#   mo2-cmake (28 calls)   cmake_common on CMAKE_PREFIX_PATH; its config file is
+#   mo2-cmake (27 calls)   cmake_common on CMAKE_PREFIX_PATH; its config file is
 #                          self-contained, so no install step is needed.
 #   siblings (29 calls)    cmake/superbuild-redirects/ stands in for configs that
 #                          would otherwise need install(EXPORT) to have run.
 #   vcpkg ports (7 calls)  mo2-dds-header, mo2-libbsarch -- resolve normally.
+#
+# Recounting these: a grep for "find_package(mo2-" across repos/ returns 66, and
+# three of those are not call sites -- two README examples and one COMMENT inside
+# cmake_common's own mo2_versions.cmake. An earlier count here read 64 / 28
+# because it included that comment. cmake_common corroborates 27 independently:
+# the comment in question notes its version block "printed these four lines 27
+# times in the superbuild".
 
 # 3.25 for the SYSTEM target property, which is load-bearing here -- see
 # mo2_mark_package_target below.
@@ -61,6 +68,23 @@ set(MO2_SOURCE_ROOT "${_mo2_default_root}"
 
 get_filename_component(MO2_SOURCE_ROOT "${MO2_SOURCE_ROOT}" ABSOLUTE)
 
+# Say so, loudly, when the fallback is what resolved. TRAPS.md records this exact
+# shape as clone-defect #2: the submodules were confirmed to EXIST and never
+# confirmed to be USED, because a sibling tree quietly won. The fallback is still
+# worth having -- cloning several GB twice is a real cost -- but it must not be the
+# quiet outcome, and a STATUS line is quiet.
+if(NOT MO2_SOURCE_ROOT STREQUAL "${CMAKE_CURRENT_LIST_DIR}/repos"
+   AND EXISTS "${MO2_SOURCE_ROOT}/uibase/CMakeLists.txt")
+  if(NOT EXISTS "${CMAKE_CURRENT_LIST_DIR}/repos/uibase/CMakeLists.txt")
+    message(WARNING
+      "[MO2] Building from a checkout OUTSIDE this repository:\n"
+      "  ${MO2_SOURCE_ROOT}\n"
+      "repos/ has no uibase, so this fell back to a sibling tree. The submodules of "
+      "THIS clone are not being built -- `git submodule update --init` if that is "
+      "not what you meant.")
+  endif()
+endif()
+
 if(NOT EXISTS "${MO2_SOURCE_ROOT}/uibase/CMakeLists.txt")
   # Distinguish "your submodules are missing" from "you pointed this somewhere
   # wrong". They are the same symptom and completely different fixes, and the
@@ -90,6 +114,72 @@ if(NOT EXISTS "${MO2_SOURCE_ROOT}/uibase/CMakeLists.txt")
 endif()
 
 message(STATUS "[MO2] sources: ${MO2_SOURCE_ROOT}")
+
+# --- Python, preflighted before anything expensive runs ---------------------------
+# cmake_common pins the version and plugin_python asks for it EXACT, with the
+# Development component. Without this check the failure lands inside plugin_python,
+# most of the way through a first configure, as a generic "Could NOT find Python"
+# that names neither the required version nor the fact that CMake looks in the
+# registry rather than on PATH.
+#
+# It runs HERE, above the Qt block, because it is the cheapest check in the file and
+# Qt is the most expensive step in it. With the order reversed -- which is how this
+# was first written -- a machine missing the development headers downloaded 3.3 GB
+# of Qt and only then failed on something detectable in under a second.
+#
+# The version is READ from cmake_common, not restated. A second copy of a version is
+# the one thing CONTRIBUTING.md tells contributors never to add, and this one drifts
+# in the nastiest direction: once cmake_common bumps, a hardcoded pin here demands
+# the OLD version and says so confidently -- which is exactly the misleading failure
+# this preflight exists to replace.
+set(_mo2_versions_file "${MO2_SOURCE_ROOT}/cmake_common/mo2_versions.cmake")
+if(NOT EXISTS "${_mo2_versions_file}")
+  message(FATAL_ERROR
+    "cmake_common is missing from the checkout:\n"
+    "  ${_mo2_versions_file}\n"
+    "It is one of the 34 submodules and every repository resolves its shared CMake "
+    "helpers through it. Fetch it with:\n"
+    "  git submodule update --init")
+endif()
+
+file(STRINGS "${_mo2_versions_file}" _mo2_python_pin_line
+     REGEX "mo2_set_if_not_defined\\(MO2_PYTHON_VERSION")
+string(REGEX MATCH "\"([0-9]+\\.[0-9]+)\"" _mo2_python_pin_match "${_mo2_python_pin_line}")
+if(NOT _mo2_python_pin_match)
+  message(FATAL_ERROR
+    "Could not read MO2_PYTHON_VERSION out of:\n"
+    "  ${_mo2_versions_file}\n"
+    "That file is the pin plugin_python resolves EXACT against. If the line was "
+    "renamed or reformatted upstream, fix this regex -- do not work around it by "
+    "hardcoding a version here, because that is how the two copies drift apart.")
+endif()
+
+# A normal variable, deliberately not a cache entry: this is a derived fact, not a
+# knob. A cache entry would go stale the first time cmake_common bumped. Subdirectory
+# scopes inherit it and cmake_common's own mo2_set_if_not_defined then keeps it --
+# same value, since it came from that file.
+set(MO2_PYTHON_VERSION "${CMAKE_MATCH_1}")
+
+find_package(Python ${MO2_PYTHON_VERSION} EXACT QUIET
+             COMPONENTS Interpreter Development.Module Development.Embed)
+if(NOT Python_FOUND)
+  message(FATAL_ERROR
+    "Python ${MO2_PYTHON_VERSION} was not found, or was found without its development files.\n"
+    "\n"
+    "plugin_python requires it EXACTly, with headers and an import library --\n"
+    "include/Python.h and libs/python<ver>.lib. Install it from python.org; the\n"
+    "embeddable package and some Store builds ship neither.\n"
+    "\n"
+    "CMake finds this through the REGISTRY, not PATH, so a Python that runs in your\n"
+    "shell is not necessarily one CMake can see. Check with:\n"
+    "  reg query HKCU\\Software\\Python\\PythonCore\n"
+    "\n"
+    "Have it somewhere CMake cannot find? Point at it:\n"
+    "  cmake --preset vs2026 -DPython_ROOT_DIR=<prefix>\n"
+    "\n"
+    "The version itself comes from cmake_common; change it there, not here.")
+endif()
+message(STATUS "[MO2] Python: ${Python_EXECUTABLE} (${MO2_PYTHON_VERSION}, from cmake_common)")
 
 # --- Qt -------------------------------------------------------------------------
 # Qt cannot come from vcpkg: MO2 needs WebEngine, which means a Chromium build. So
@@ -191,13 +281,36 @@ if(NOT MO2_QT_DIR AND MO2_AUTO_INSTALL_QT)
         "Install Qt by hand instead:\n" ${_mo2_qt_manual_instructions})
     endif()
 
+    # aqt's dependencies FIRST, pinned and hash-verified, then aqt itself with
+    # --no-deps so pip has nothing left to resolve.
+    #
+    # Two invocations rather than one because --require-hashes cannot express a
+    # git+https requirement: aqt is pinned by commit, which is already a content
+    # address, while its 22 dependencies came from PyPI unpinned. That was the last
+    # unverified download in a project that hashes everything else it fetches -- and
+    # the highest-privilege one, since this runs automatically on every fresh clone.
+    execute_process(
+      COMMAND "${_mo2_venv}/Scripts/python.exe" -m pip install
+              --disable-pip-version-check --require-hashes
+              -r "${CMAKE_CURRENT_LIST_DIR}/cmake/aqt-requirements.txt"
+      RESULT_VARIABLE _mo2_rc)
+    if(NOT _mo2_rc EQUAL 0)
+      message(FATAL_ERROR "[MO2] could not install aqt's dependencies.\n"
+        "A HASH MISMATCH here is not something to work around -- it means a release "
+        "on PyPI no longer has the bytes this file recorded. A resolution failure "
+        "instead usually means MO2_AQTINSTALL_COMMIT moved and aqt now wants "
+        "something the lock does not carry; regenerate cmake/aqt-requirements.txt "
+        "as its header describes.\nInstall Qt by hand instead:\n"
+        ${_mo2_qt_manual_instructions})
+    endif()
+
     # aqt from git, never PyPI: the released version lags Qt's repository layout
     # and fails outright on current Qt versions. Pinned to a commit rather than the
     # default branch, because configure runs this on every fresh clone and an
     # unpinned fetch would execute whatever that repository's HEAD held at the time.
     execute_process(
       COMMAND "${_mo2_venv}/Scripts/python.exe" -m pip install
-              --disable-pip-version-check
+              --disable-pip-version-check --no-deps
               "git+https://github.com/miurahr/aqtinstall@${MO2_AQTINSTALL_COMMIT}"
       RESULT_VARIABLE _mo2_rc)
     if(NOT _mo2_rc EQUAL 0)
@@ -259,33 +372,6 @@ endif()
 
 message(STATUS "[MO2] Qt: ${MO2_QT_DIR}")
 list(APPEND CMAKE_PREFIX_PATH "${MO2_QT_DIR}")
-
-# --- Python, checked here rather than where it is needed --------------------------
-# cmake_common pins MO2_PYTHON_VERSION and plugin_python asks for it EXACT, with the
-# Development component. Without this check the failure lands inside plugin_python,
-# most of the way through a first configure, as a generic "Could NOT find Python"
-# that names neither the required version nor the fact that CMake looks in the
-# registry rather than on PATH. Everything else expensive is preflighted; this was
-# the gap.
-set(MO2_PYTHON_VERSION "3.14" CACHE STRING "Python the build requires; must match cmake_common")
-find_package(Python ${MO2_PYTHON_VERSION} EXACT QUIET
-             COMPONENTS Interpreter Development.Module Development.Embed)
-if(NOT Python_FOUND)
-  message(FATAL_ERROR
-    "Python ${MO2_PYTHON_VERSION} was not found, or was found without its development files.\n"
-    "\n"
-    "plugin_python requires it EXACTly, with headers and an import library --\n"
-    "include/Python.h and libs/python<ver>.lib. Install it from python.org; the\n"
-    "embeddable package and some Store builds ship neither.\n"
-    "\n"
-    "CMake finds this through the REGISTRY, not PATH, so a Python that runs in your\n"
-    "shell is not necessarily one CMake can see. Check with:\n"
-    "  reg query HKCU\\Software\\Python\\PythonCore\n"
-    "\n"
-    "Have it somewhere CMake cannot find? Point at it:\n"
-    "  cmake --preset vs2026 -DPython_ROOT_DIR=<prefix>")
-endif()
-message(STATUS "[MO2] Python: ${Python_EXECUTABLE}")
 
 # --- resolve mo2-cmake from source, no install required ------------------------
 list(APPEND CMAKE_PREFIX_PATH "${MO2_SOURCE_ROOT}/cmake_common")
@@ -359,19 +445,80 @@ set(MO2_USVFS_PREFIX "${CMAKE_BINARY_DIR}/usvfs-install")
 # into every game process -- inside a v146 build after a toolset change, with no
 # error anywhere. The CI cache key already carries the toolset for exactly this
 # reason; this is the same rule applied locally.
+#
+# The SOURCE revision belongs in it for the same reason the toolchain does, and was
+# missing: with only the toolchain recorded, bumping the repos/usvfs gitlink or
+# editing usvfs's sources left the stamp valid, so configure skipped the rebuild and
+# the whole tree linked against the previously built DLL. Nothing failed, nothing
+# printed. CI was already stricter than the local build here -- its cache key is the
+# gitlink SHA (.github/workflows/build.yml) -- which is backwards, because the local
+# build is the one people run while changing usvfs.
+#
+# git may be absent, or repos/usvfs may not be a git checkout at all when
+# MO2_SOURCE_ROOT points somewhere else. Then the revision is simply unknown, and
+# the honest response is to say so rather than to pretend: rebuilding on every
+# configure would cost several minutes each time to guard a case the README already
+# rules out (git is a stated requirement), and silently recording "unknown" as if it
+# were a revision is the failure this whole block is about.
+find_package(Git QUIET)
+set(_mo2_usvfs_rev "unknown")
+if(GIT_EXECUTABLE AND EXISTS "${MO2_SOURCE_ROOT}/usvfs/.git")
+  execute_process(
+    COMMAND "${GIT_EXECUTABLE}" -C "${MO2_SOURCE_ROOT}/usvfs" rev-parse HEAD
+    OUTPUT_VARIABLE _mo2_usvfs_head OUTPUT_STRIP_TRAILING_WHITESPACE
+    ERROR_QUIET RESULT_VARIABLE _mo2_usvfs_rc)
+  if(_mo2_usvfs_rc EQUAL 0 AND _mo2_usvfs_head)
+    # Uncommitted work counts as a different source. `git status --porcelain` is
+    # non-empty for any modification, so hashing it distinguishes one dirty state
+    # from another rather than merely flagging "dirty" -- editing usvfs twice in a
+    # row has to rebuild twice.
+    execute_process(
+      COMMAND "${GIT_EXECUTABLE}" -C "${MO2_SOURCE_ROOT}/usvfs" status --porcelain
+      OUTPUT_VARIABLE _mo2_usvfs_dirty ERROR_QUIET)
+    string(SHA256 _mo2_usvfs_dirty_hash "${_mo2_usvfs_dirty}")
+    string(SUBSTRING "${_mo2_usvfs_dirty_hash}" 0 12 _mo2_usvfs_dirty_hash)
+    set(_mo2_usvfs_rev "${_mo2_usvfs_head}+${_mo2_usvfs_dirty_hash}")
+  endif()
+endif()
+
+if(_mo2_usvfs_rev STREQUAL "unknown")
+  message(WARNING
+    "[MO2] cannot determine the usvfs source revision (no git, or "
+    "${MO2_SOURCE_ROOT}/usvfs is not a git checkout).\n"
+    "usvfs will be built once and then reused for as long as the toolchain is "
+    "unchanged, INCLUDING after its sources change. Force a rebuild by deleting "
+    "${MO2_USVFS_PREFIX}.")
+endif()
+
 set(_mo2_usvfs_stamp "${MO2_USVFS_PREFIX}/.mo2-usvfs-complete")
 set(_mo2_usvfs_id
     "generator=${CMAKE_GENERATOR}\ntoolset=${CMAKE_GENERATOR_TOOLSET}\n"
-    "triplets=x86-windows-static-md,x64-windows-static-md\nconfig=RelWithDebInfo\n")
+    "triplets=x86-windows-static-md,x64-windows-static-md\nconfig=RelWithDebInfo\n"
+    "usvfs=${_mo2_usvfs_rev}\n")
 string(REPLACE ";" "" _mo2_usvfs_id "${_mo2_usvfs_id}")
 
 set(_mo2_usvfs_stale TRUE)
+set(_mo2_usvfs_reason "first build")
 if(EXISTS "${_mo2_usvfs_stamp}")
   file(READ "${_mo2_usvfs_stamp}" _mo2_usvfs_prev)
   if(_mo2_usvfs_prev STREQUAL "${_mo2_usvfs_id}")
     set(_mo2_usvfs_stale FALSE)
   else()
-    message(STATUS "[MO2] usvfs was built with a different toolchain -- rebuilding")
+    # Name what actually changed. "different toolchain" was the only message this
+    # ever printed, and it became wrong half the time once the source revision
+    # joined the identity -- a rebuild attributed to the wrong cause is how someone
+    # goes looking for a toolset change that never happened.
+    if(_mo2_usvfs_prev MATCHES "usvfs=([^\n]*)")
+      set(_mo2_usvfs_prev_rev "${CMAKE_MATCH_1}")
+      if(NOT _mo2_usvfs_prev_rev STREQUAL "${_mo2_usvfs_rev}")
+        set(_mo2_usvfs_reason "usvfs sources changed")
+      else()
+        set(_mo2_usvfs_reason "toolchain changed")
+      endif()
+    else()
+      set(_mo2_usvfs_reason "stamp predates source tracking")
+    endif()
+    message(STATUS "[MO2] usvfs stamp does not match -- rebuilding (${_mo2_usvfs_reason})")
   endif()
 endif()
 
@@ -381,7 +528,10 @@ if(_mo2_usvfs_stale)
     list(GET _pair 0 _arch)
     list(GET _pair 1 _triplet)
 
-    message(STATUS "[MO2] building usvfs (${_arch}) -- first configure only")
+    # Not "first configure only": the stamp also invalidates on a toolchain change
+    # or a usvfs source change, and saying otherwise makes a legitimate rebuild look
+    # like the guard has failed.
+    message(STATUS "[MO2] building usvfs (${_arch}) -- ${_mo2_usvfs_reason}")
 
     # Only pass -T when there is a toolset. Configuring without the preset leaves
     # CMAKE_GENERATOR_TOOLSET empty, and `-T ""` is not the same as omitting it.
@@ -432,7 +582,10 @@ list(APPEND CMAKE_PREFIX_PATH "${MO2_USVFS_PREFIX}")
 # exactly as mob leaves them. This runs during `cmake --install`, long after
 # every include path has been decided, so it cannot reintroduce the duplicate
 # header problem described above.
-install(DIRECTORY "${MO2_USVFS_PREFIX}/" DESTINATION "." USE_SOURCE_PERMISSIONS)
+# The stamp is build-tree bookkeeping and was being deployed along with everything
+# else, leaving a stray install/.mo2-usvfs-complete in the shipped tree.
+install(DIRECTORY "${MO2_USVFS_PREFIX}/" DESTINATION "." USE_SOURCE_PERMISSIONS
+        PATTERN ".mo2-usvfs-complete" EXCLUDE)
 
 # --- deployment: the parts of mob that are not a build system --------------------
 #
@@ -632,7 +785,7 @@ mo2_add_repo(bsatk)
 mo2_add_repo(lootcli)
 mo2_add_repo(helper)
 
-# --- uibase: 23 of the 64 find_package sites want it, and every plugin does ---
+# --- uibase: 23 of the 63 find_package sites want it, and every plugin does ---
 mo2_add_repo(uibase)
 
 # Every target consumed through a find_package redirect, marked SYSTEM so
