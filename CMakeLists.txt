@@ -432,20 +432,34 @@ foreach(_ss ${_mo2_ss_releases})
 endforeach()
 
 # explorer++: a prebuilt binary MO2 ships, from its own site rather than GitHub.
+#
+# The inner guard is load-bearing, and its absence was a real bug: `set()` inside
+# the branch creates a NORMAL variable, which shadows the cache entry for this
+# configure only. The next configure reads the cache again -- still
+# MO2_SOURCE_ROOT/explorer++, still absent -- re-enters the branch and downloads
+# again. It did that on every configure until 2026-08-15, which also meant that a
+# fully built tree could not be reconfigured without a network, because the
+# failure below is fatal. The stylesheet loop above has always had the equivalent
+# guard; this was the odd one out.
+#
+# The nesting matters too: the download must only ever target the build tree,
+# never MO2_SOURCE_ROOT, which this project does not write to.
 if(NOT EXISTS "${MO2_EXPLORERPP_DIR}")
   set(MO2_EXPLORERPP_DIR "${MO2_PREBUILT_DIR}/explorer++")
-  set(_epp_zip "${MO2_PREBUILT_DIR}/explorerpp_x64.zip")
-  message(STATUS "[MO2] downloading Explorer++ ${MO2_EXPLORERPP_VERSION}")
-  file(DOWNLOAD
-    "https://download.explorerplusplus.com/stable/${MO2_EXPLORERPP_VERSION}/explorerpp_x64.zip"
-    "${_epp_zip}" STATUS _dl TLS_VERIFY ON)
-  list(GET _dl 0 _dl_code)
-  if(NOT _dl_code EQUAL 0)
-    list(GET _dl 1 _dl_msg)
-    message(FATAL_ERROR "downloading Explorer++: ${_dl_msg}")
+  if(NOT EXISTS "${MO2_EXPLORERPP_DIR}/Explorer++.exe")
+    set(_epp_zip "${MO2_PREBUILT_DIR}/explorerpp_x64.zip")
+    message(STATUS "[MO2] downloading Explorer++ ${MO2_EXPLORERPP_VERSION}")
+    file(DOWNLOAD
+      "https://download.explorerplusplus.com/stable/${MO2_EXPLORERPP_VERSION}/explorerpp_x64.zip"
+      "${_epp_zip}" STATUS _dl TLS_VERIFY ON)
+    list(GET _dl 0 _dl_code)
+    if(NOT _dl_code EQUAL 0)
+      list(GET _dl 1 _dl_msg)
+      message(FATAL_ERROR "downloading Explorer++: ${_dl_msg}")
+    endif()
+    file(MAKE_DIRECTORY "${MO2_EXPLORERPP_DIR}")
+    file(ARCHIVE_EXTRACT INPUT "${_epp_zip}" DESTINATION "${MO2_EXPLORERPP_DIR}")
   endif()
-  file(MAKE_DIRECTORY "${MO2_EXPLORERPP_DIR}")
-  file(ARCHIVE_EXTRACT INPUT "${_epp_zip}" DESTINATION "${MO2_EXPLORERPP_DIR}")
 endif()
 
 install(DIRECTORY "${MO2_EXPLORERPP_DIR}/" DESTINATION bin/explorer++)
