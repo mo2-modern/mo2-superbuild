@@ -1,36 +1,23 @@
-# MO2 superbuild -- open this folder in Visual Studio or Rider, pick the vs2026
-# preset, click build.
+# MO2 superbuild -- see README.md to build it, docs/DECISIONS.md for why it is
+# shaped this way.
 #
-# This directory is deliberately tiny and self-contained. It holds no sources, no
-# submodules and no build artifacts from mob: the repositories stay where they
-# are, and everything this project produces goes into ./build. Nothing here edits
-# any of the 33 forked repositories, so the whole superbuild costs zero merge
-# surface on sync -- see ADR-001. The 63 find_package(mo2-*) call sites upstream
-# are left exactly as written.
+# This file adds all 33 buildable MO2 repositories as subdirectories. It edits
+# none of them, because every edited line is merge surface on sync (ADR-001), so
+# their 64 find_package(mo2-*) calls -- which normally each require a prior
+# install -- have to be satisfied from outside. Three ways:
 #
-# Two mechanisms make that possible:
-#
-#   mo2-cmake (27 call sites)
-#       cmake_common ships mo2-cmake-config.cmake, which only does
-#       include(${CMAKE_CURRENT_LIST_DIR}/mo2.cmake) -- self-contained, no install
-#       step. Putting cmake_common on CMAKE_PREFIX_PATH resolves all 27. mob has
-#       always done this, so the mechanism is proven rather than novel.
-#
-#   sibling packages (uibase 23, bsatk 3, esptk/archive/lootcli-header 1 each)
-#       Their real configs include a *-targets.cmake that install(EXPORT) writes
-#       only at install time -- the install-then-find cycle this project exists to
-#       break. cmake/superbuild-redirects/ stands in, asserting the alias target
-#       already exists.
+#   mo2-cmake (28 calls)   cmake_common on CMAKE_PREFIX_PATH; its config file is
+#                          self-contained, so no install step is needed.
+#   siblings (29 calls)    cmake/superbuild-redirects/ stands in for configs that
+#                          would otherwise need install(EXPORT) to have run.
+#   vcpkg ports (7 calls)  mo2-dds-header, mo2-libbsarch -- resolve normally.
 
 # 3.25 for the SYSTEM target property, which is load-bearing here -- see
 # mo2_mark_package_target below.
 cmake_minimum_required(VERSION 3.25)
 
-# --- vcpkg must be present before project() -----------------------------------
-# The preset points CMAKE_TOOLCHAIN_FILE into vcpkg/, which is a submodule. CMake
-# reads the toolchain file inside project(), so a clone without --recursive dies
-# there with "Could not find toolchain file" and no hint about what to do about
-# it. This check runs first and says it.
+# CMake reads the toolchain file inside project(), so without this a clone made
+# without --recursive dies there with "Could not find toolchain file" and no hint.
 if(CMAKE_TOOLCHAIN_FILE AND NOT EXISTS "${CMAKE_TOOLCHAIN_FILE}")
   message(FATAL_ERROR
     "vcpkg is missing. Expected its toolchain file at:\n"
@@ -73,26 +60,9 @@ endif()
 message(STATUS "[MO2] sources: ${MO2_SOURCE_ROOT}")
 
 # --- Qt -------------------------------------------------------------------------
-# Qt is the one prerequisite this project cannot provide for itself. It cannot be
-# built through vcpkg: MO2 needs WebEngine, which means a Chromium build.
-#
-# It IS downloaded automatically, and the three objections that used to stop that
-# are engineered against rather than argued with:
-#
-#   silent      aqt's output is NOT captured into a variable, so it streams to the
-#               IDE's CMake output pane exactly as it would in a terminal, behind a
-#               banner that names the size before anything starts.
-#   recovery    it installs into qt.tmp/ and is renamed into qt/ only after
-#               Qt6Config.cmake is verified present. A dropped connection therefore
-#               leaves NO qt/ at all, and the next configure retries from scratch --
-#               the failure worth engineering against is not a slow download, it is
-#               a half-download that looks complete and fails 30 minutes later.
-#   consent     MO2_AUTO_INSTALL_QT=OFF restores the old behaviour exactly: print the
-#               command and stop.
-#
-# It also installs aqt into a throwaway venv under build/ rather than into the user's
-# Python. Configuring a project should not mutate the site-packages of an interpreter
-# the user uses for other things.
+# Qt cannot come from vcpkg: MO2 needs WebEngine, which means a Chromium build. So
+# configure downloads it, staging into qt.tmp/ and renaming only once verified --
+# see ADR-024 for why that staging matters and what MO2_AUTO_INSTALL_QT=OFF does.
 set(MO2_QT_VERSION "6.11.1" CACHE STRING "Qt version to build against")
 set(MO2_QT_ARCH "msvc2022_64" CACHE STRING "Qt build to use; msvc2022_64 links fine against v145")
 set(MO2_QT_DIR "" CACHE PATH "Qt prefix. Auto-detected when empty")
@@ -101,30 +71,15 @@ set(MO2_AQTINSTALL_COMMIT "16db45a70b5905ad596941b223469bc86a56901e"
     CACHE STRING "Commit of miurahr/aqtinstall to install Qt with")
 
 # --- the Qt module list, defined exactly ONCE -----------------------------------
-# This list used to be copy-pasted into four places: the FATAL_ERROR text below,
-# README.md, docs/BUILD.md and .github/workflows/build.yml. They drifted, and
-# docs/TRAPS.md records what that cost -- the live instructions lost qtwebsockets
-# and qtnetworkauth for four months, so anybody following this project's own
-# documentation on a clean machine could not configure, and no local build could
-# expose it because every machine here already had a fuller Qt from earlier work.
+# The download, the printed fallback instructions and the CI cache key all derive
+# from this variable. Change the modules here and nowhere else -- ADR-024 records
+# what the previous four copies cost.
 #
-# Everything below derives from this variable: the command that RUNS and the command
-# that is PRINTED are now the same string by construction, so they cannot disagree
-# again. Change the modules here and nowhere else.
-#
-# The list fails in two directions, which is why it is not "optional extras":
-#
-#   qtwebsockets, qtnetworkauth   BUILD requirements, both named by
-#                                 modorganizer/src/CMakeLists.txt. Omitting either
-#                                 stops configure with "Failed to find required Qt
-#                                 component" -- and only after vcpkg has built
-#                                 everything, so it costs a full run to discover.
-#   qtimageformats                RUNTIME requirement, and it fails SILENTLY.
-#                                 Upstream CI compiles MO2 without launching it, so
-#                                 its list omits runtime-only modules; without this
-#                                 one MO2 ships 4 image plugins instead of 9 and
-#                                 cannot render TGA, TIFF or WebP mod previews, with
-#                                 nothing failing at build time.
+# Neither half of the list is optional, and they fail differently:
+#   qtwebsockets, qtnetworkauth  build requirements (modorganizer/src/CMakeLists.txt)
+#   qtimageformats               RUNTIME requirement that fails SILENTLY -- without
+#                                it MO2 ships 4 image plugins instead of 9 and
+#                                cannot render TGA, TIFF or WebP mod previews.
 set(MO2_QT_MODULES
     qtwebengine qtwebchannel qtpositioning qtserialport qtimageformats
     qtwebsockets qtnetworkauth qttasktree
@@ -205,17 +160,9 @@ if(NOT MO2_QT_DIR AND MO2_AUTO_INSTALL_QT)
     endif()
 
     # aqt from git, never PyPI: the released version lags Qt's repository layout
-    # and fails outright on current Qt versions.
-    #
-    # Pinned to a commit, not to the default branch. Configure runs this on every
-    # fresh clone, so an unpinned `git+https://...` would execute whatever that
-    # third-party repository's HEAD happened to contain at the moment somebody
-    # cloned -- a build that is not reproducible, and an execution the project
-    # cannot vouch for. This commit is the one that demonstrably installed Qt
-    # 6.11.1 for this tree on 2026-08-15 (aqtinstall 3.3.1.dev162).
-    #
-    # Bump it deliberately, and re-run a Qt install when you do; the reason this
-    # is not on a release tag is in the paragraph above.
+    # and fails outright on current Qt versions. Pinned to a commit rather than the
+    # default branch, because configure runs this on every fresh clone and an
+    # unpinned fetch would execute whatever that repository's HEAD held at the time.
     execute_process(
       COMMAND "${_mo2_venv}/Scripts/python.exe" -m pip install
               --disable-pip-version-check
@@ -227,8 +174,8 @@ if(NOT MO2_QT_DIR AND MO2_AUTO_INSTALL_QT)
         ${_mo2_qt_manual_instructions})
     endif()
 
-    # Into qt.tmp, never straight into qt: see the header comment. No OUTPUT_VARIABLE
-    # anywhere in this block -- that is what keeps the download visible.
+    # Into qt.tmp, never straight into qt (ADR-024). No OUTPUT_VARIABLE anywhere in
+    # this block -- that is what keeps the download visible while it runs.
     execute_process(
       COMMAND "${_mo2_venv}/Scripts/python.exe" -m aqt install-qt
               windows desktop "${MO2_QT_VERSION}" "win64_${MO2_QT_ARCH}"
@@ -417,15 +364,10 @@ set(MO2_EXPLORERPP_DIR "${MO2_SOURCE_ROOT}/explorer++"
 # semicolon-bearing strings flattens them into individual tokens, so the tuples
 # would silently come apart and produce empty URLs.
 #
-# The hashes matter because a GitHub release tag is mutable: it can be deleted
-# and re-pushed at a different commit, and nothing about the URL would change.
-# These archives are extracted into the tree MO2 ships, so an unpinned fetch
-# means the contents of a shipped build are decided by someone else's repository
-# at download time. Each hash below was taken from the archive this project
-# actually downloaded and shipped on 2026-08-15.
-#
-# When a stylesheet is updated, the hash must be updated with the version. That
-# is the point: the build should stop rather than quietly ship different bytes.
+# The hashes are here because a GitHub release tag is mutable -- it can be
+# re-pushed at different bytes with no change to the URL -- and these archives are
+# extracted into the tree MO2 ships. Update the hash with the version; the build
+# stopping is the point.
 set(_mo2_stylesheets
   "6788-00|paper-light-and-dark|7.2|paper-light-and-dark|f8399199cc8dd99d5beb121c2cbfe9a606d7238b12500b881857f2e0b93765ee"
   "6788-00|paper-automata|3.2|paper-automata|2eaea2a11f53f762c843d15e8fe1fd5c5b138ed5a215f9aaf6eb3d8176bb84f6"
@@ -478,17 +420,13 @@ endforeach()
 
 # explorer++: a prebuilt binary MO2 ships, from its own site rather than GitHub.
 #
-# The inner guard is load-bearing, and its absence was a real bug: `set()` inside
-# the branch creates a NORMAL variable, which shadows the cache entry for this
-# configure only. The next configure reads the cache again -- still
-# MO2_SOURCE_ROOT/explorer++, still absent -- re-enters the branch and downloads
-# again. It did that on every configure until 2026-08-15, which also meant that a
-# fully built tree could not be reconfigured without a network, because the
-# failure below is fatal. The stylesheet loop above has always had the equivalent
-# guard; this was the odd one out.
-#
-# The nesting matters too: the download must only ever target the build tree,
-# never MO2_SOURCE_ROOT, which this project does not write to.
+# Both guards are load-bearing. The outer one resolves the location; the inner one
+# is what stops a re-download, and without it this fetched the zip on EVERY
+# configure -- `set()` inside the branch makes a normal variable, which shadows
+# the cache entry for that configure only, so the next one sees the cache again
+# and re-enters. With a fatal failure path, that also meant configure needed a
+# network forever. The nesting keeps the download inside the build tree, never in
+# MO2_SOURCE_ROOT.
 if(NOT EXISTS "${MO2_EXPLORERPP_DIR}")
   set(MO2_EXPLORERPP_DIR "${MO2_PREBUILT_DIR}/explorer++")
   if(NOT EXISTS "${MO2_EXPLORERPP_DIR}/Explorer++.exe")
@@ -641,23 +579,11 @@ mo2_add_repo(plugin_python)
 mo2_add_repo(installer_fomod_csharp)
 mo2_add_repo(installer_omod)
 
-# --- build and install are separate steps ------------------------------------------
-# Install is NOT folded into the default build. Build compiles, install deploys; an
-# IDE exposes both (Visual Studio's Build menu carries "Install mo2"), and the command
-# line spells them `cmake --build build` and `cmake --install build`. Keeping them
-# separate is the conventional contract, and a build that silently rewrote a
-# deployment tree would be the surprising thing -- see ADR-023.
+# Install is deliberately NOT folded into the default build -- see ADR-023.
 #
-# What this costs is that `install/` is the only place MO2 can run from, so a build
-# alone produces nothing runnable. That is a documentation problem rather than a build
-# one, and it is documented: the README says to install, and organizer's debugger
-# command points at the install tree so Run cannot silently start the wrong binary.
-#
-# The startup project has to be set here rather than in cmake_common, because
-# mo2_configure_target() sets VS_STARTUP_PROJECT on ${PROJECT_SOURCE_DIR} -- each
-# repository's own directory -- and Visual Studio reads that property from the
-# top-level source directory only. All ~20 of those are silently ignored, and the IDE
-# falls back to the first target alphabetically: archive, a DLL, which cannot be
-# launched at all.
+# The startup project must be set here and not in cmake_common: mo2_configure_target()
+# sets VS_STARTUP_PROJECT on each repository's own directory, and Visual Studio reads
+# it from the top-level source directory only, so all ~20 of those are ignored and the
+# IDE falls back to the first target alphabetically -- archive, a DLL, unlaunchable.
 set_property(DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
              PROPERTY VS_STARTUP_PROJECT organizer)
