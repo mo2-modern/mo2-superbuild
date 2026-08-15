@@ -62,6 +62,33 @@ jobs:
         with:
           submodules: recursive
 
+      # The tag does NOT define the version -- version.rc does. This step exists so
+      # that a mistyped tag fails here rather than producing artifacts named after a
+      # version the binaries do not report. Same rule as the Qt pin above: derive it,
+      # never restate it.
+      - name: Check the tag against version.rc
+        id: ver
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: pwsh
+        run: |
+          $tag = "${{ github.ref_name }}" -replace '^v',''
+          $rc  = Get-Content repos/modorganizer/src/version.rc -Raw
+          $str = [regex]::Match($rc, 'VER_FILEVERSION_STR\s+"([0-9.]+)').Groups[1].Value
+          if (-not $str) {
+            throw "Could not read VER_FILEVERSION_STR from repos/modorganizer/src/version.rc. If it was renamed, update this step."
+          }
+          if ($tag -ne $str) {
+            throw "Tag v$tag does not match version.rc ($str). version.rc is the source of truth -- bump it, commit, then re-tag."
+          }
+          "version=$tag" | Out-File $env:GITHUB_OUTPUT -Append
+
+          # Packaging needs 7z, and it runs 40 minutes from now. Check it here so a
+          # runner image without it costs seconds rather than a whole build.
+          if (-not (Get-Command 7z -ErrorAction SilentlyContinue)) {
+            throw "7z is not on PATH on this runner; the Package step would fail after the build."
+          }
+          Write-Host "Releasing $str"
+
       # The tree is pinned to 3.14; this image defaults to 3.12.
       - uses: actions/setup-python@v7
         with:
@@ -236,27 +263,6 @@ jobs:
       # release has to be the same build the verification above just passed. A
       # separate release workflow would be a second copy of the build logic, and
       # duplicated facts drifting apart is the recurring bug in this project.
-
-      # The tag does NOT define the version -- version.rc does. This step exists so
-      # that a mistyped tag fails here rather than producing artifacts named after a
-      # version the binaries do not report. Same rule as the Qt pin above: derive it,
-      # never restate it.
-      - name: Check the tag against version.rc
-        id: ver
-        if: startsWith(github.ref, 'refs/tags/v')
-        shell: pwsh
-        run: |
-          $tag = "${{ github.ref_name }}" -replace '^v',''
-          $rc  = Get-Content repos/modorganizer/src/version.rc -Raw
-          $str = [regex]::Match($rc, 'VER_FILEVERSION_STR\s+"([0-9.]+)').Groups[1].Value
-          if (-not $str) {
-            throw "Could not read VER_FILEVERSION_STR from repos/modorganizer/src/version.rc. If it was renamed, update this step."
-          }
-          if ($tag -ne $str) {
-            throw "Tag v$tag does not match version.rc ($str). version.rc is the source of truth -- bump it, commit, then re-tag."
-          }
-          "version=$tag" | Out-File $env:GITHUB_OUTPUT -Append
-          Write-Host "Releasing $str"
 
       - name: Package
         if: startsWith(github.ref, 'refs/tags/v')
