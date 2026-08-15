@@ -3,12 +3,21 @@
 Fixes found in this project that belong to upstream `ModOrganizer2/*` rather than to our
 modernization. Each is already implemented and verified on our `modern` branches.
 
-> 🔴 **Status: NOT submitting — [ADR-015](DECISIONS.md#adr-015). Do not open PRs against
-> `ModOrganizer2/*`.**
+> 🔴 **Status: do NOT open PRs against `ModOrganizer2/*`.** The [ADR-015](DECISIONS.md#adr-015)
+> gate — real use of a build made from the `mo2-modern` repos — was met on 2026-08-15, but
+> submission is held behind [ADR-026](DECISIONS.md#adr-026): the project is shown in the MO2 Discord
+> first, and the owner decides afterwards.
 >
-> This file is bookkeeping so the set stays submittable the day that reverses. **Upstreaming means
-> cutting a fresh branch from `master` and applying the single change — never merging `modern`**,
-> which carries our toolchain and fork-identity commits.
+> The technical precondition is satisfied; the hold is a judgement call and it is the owner's. This
+> file stays bookkeeping until they say otherwise.
+>
+> **When that reverses, upstreaming means cutting a fresh branch from `master` and applying the
+> single change — never merging `modern`**, which carries our toolchain and fork-identity commits.
+>
+> ⚠️ **One PR per fix, and describe the evidence honestly.** Ordinary use covered the download,
+> mod-install, LOOT and UI paths; it did not cover the Fallout 76 save readers (#6, #7), the
+> Oblivion OMOD shader paths (#14, #15) or the Starfield blueprint regex (#9), and #17 and #20 are
+> not runtime-observable at all. Submit those on their static evidence and say so.
 
 ## The count
 
@@ -60,7 +69,10 @@ Commits are one per repository:
 `archive 3a3036f`, `esptk d21e9ae`, `bsatk cee9b6b`, `lootcli eb0c48e`, `nxmhandler 76f4607`,
 `installer_bain df9a86e`, `installer_bundle 3644032`, `installer_manual 9d5e705`, `uibase deccda5`,
 `game_bethesda c86472b`, `installer_fomod 49b4e8f`, `modorganizer 1f6771ae`, `usvfs 200c316`
-(**usvfs is committed but NOT pushed** — it is the hooking layer and this is not runtime-verified).
+(usvfs was committed but held back unpushed, because it is the hooking layer and was not
+runtime-verified. **That blocker is now addressable**: `repos/usvfs` is at `8f049b9`, which carries
+this change, so a build from these repos that has launched games through MO2 has exercised it.
+Confirm the build you used was on that commit, then pushing is a decision rather than a block.)
 
 The fix is `{}` at the declaration rather than entries in initialiser lists: type-agnostic, covers
 every constructor at once, and cannot reorder a list into C5038.

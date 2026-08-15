@@ -199,6 +199,19 @@ git -C build/build/<repo> grep -l "include.*boost/" -- '*.cpp' '*.h' '*.hpp'   #
 The same inflation ruins any `CXX_STANDARD` / `cxx_std_*` survey. Exclude `vcpkg_installed`,
 `vsbuild*` and `tidy` — or just use `git grep`.
 
+**A grep for `find_package(mo2-` returns 66; only 63 are call sites.** The other three are two
+README examples and — the one that actually caused trouble — a **comment** inside
+`cmake_common/mo2_versions.cmake`, which reads *"every repository that calls
+`find_package(mo2-cmake)` re-runs this file."* A recount that included it produced the figure **64,
+with 28 `mo2-cmake`**, and that number reached `CMakeLists.txt`, `README.md`, `CONTRIBUTING.md` and
+`ARCHITECTURE.md` before anyone looked at the matched lines. The true split is **27 `mo2-cmake` + 29
+siblings + 7 vcpkg ports = 63**.
+
+**The corroboration was available the whole time and in the same file:** the comment sits directly
+above a guard whose own text says the version block *"printed these four lines 27 times in the
+superbuild"* — 27 scopes, i.e. 27 real call sites. **When a count comes from a grep, read the
+matched lines, and look for a second measurement that should agree with it.**
+
 **Derive worklists from the compiler, not from a regex over paths.** A site survey built from a
 regex matching files directly under `src/` silently missed all of `src/shared/`, and those sites
 only surfaced when the compiler was asked again.

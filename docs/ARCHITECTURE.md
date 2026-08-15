@@ -169,7 +169,7 @@ configure.
 It is also the reason **a green build is never sufficient verification** — see
 [BUILD.md](BUILD.md#verification).
 
-**`cmake_common` exports CMake *modules*, not targets.** 28 of the 64 `find_package(mo2-*)` call
+**`cmake_common` exports CMake *modules*, not targets.** 27 of the 63 `find_package(mo2-*)` call
 sites depend on it, and `if(NOT TARGET …)` cannot guard a module package — see
 [ADR-017](DECISIONS.md#adr-017).
 

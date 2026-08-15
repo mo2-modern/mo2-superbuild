@@ -27,7 +27,7 @@ verify) and several decisions look wrong without it.
 | [012](#adr-012) | Do **not** repair the `EXTERNAL_WARNINGS` keyword | Accepted |
 | [013](#adr-013) | Centralizing `vcpkg-configuration` is blocked on Phase 5, not a Phase 2 task | Superseded by Phase 5 |
 | [014](#adr-014) | `pybind11` and `spdlog` are pinned **down** deliberately | Accepted |
-| [015](#adr-015) | Do not open upstream PRs yet | Accepted |
+| [015](#adr-015) | Do not open upstream PRs yet | Gate met 2026-08-15 — **still held**, see ADR-026 |
 | [016](#adr-016) | Drop the `cmake_minimum_required` bumps | Accepted |
 | [017](#adr-017) | Defer the superbuild `find_package` guards | Superseded: the guards were never needed |
 | [018](#adr-018) | Phase order is fixed — do not reorder | Accepted |
@@ -37,6 +37,8 @@ verify) and several decisions look wrong without it.
 | [022](#adr-022) | Documentation is split by content **lifetime** | Accepted |
 | [023](#adr-023) | Build and install stay **separate steps** | Accepted — supersedes a same-day decision |
 | [024](#adr-024) | Configure downloads Qt; `MO2_QT_MODULES` is the only copy of the list | Accepted |
+| [025](#adr-025) | `RelWithDebInfo` is the only configuration the preset offers | Accepted |
+| [026](#adr-026) | Show the project in the MO2 Discord before submitting anything upstream | Accepted |
 
 ---
 
@@ -282,9 +284,35 @@ a project, not a bump. Revisit only when modernizing `plugin_python`.
 
 ## ADR-015
 ### Do not open upstream PRs yet — gated on a week of real use
-**2026-08-10 · Accepted · gate defined 2026-08-11**
+**2026-08-10 · Accepted · gate defined 2026-08-11 · ✅ GATE CLEARED 2026-08-15**
 
-**31 verified bug fixes** and 4 build-tool fixes are ready. **Not submitting yet.**
+✅ **The original gate is met.** The owner reports several days of real use of a build made from the
+`mo2-modern` repos — not a stock release — which is exactly the condition set below.
+
+🔴 **Still do not open PRs.** Submission is now held behind a *different* decision, taken
+2026-08-15: the owner intends to show the project in the MO2 Discord first and decide afterwards.
+This is a deliberate hold, not the old gate lingering — the technical precondition is satisfied and
+the remaining question is one of timing and reception, which is the owner's to answer.
+
+Do not read "gate cleared" as "submit". Nothing goes to `ModOrganizer2/*` until the owner says so.
+
+⚠️ **Claim only what the use actually covered.** Ordinary modding exercises the download,
+mod-install, LOOT and UI paths, so #1, #13, #19 and the #21 sweep carry runtime evidence. It does
+not reach the game-specific ones — #6/#7 need Fallout 76 saves, #14/#15 an Oblivion OMOD carrying
+shaders, #9 a Starfield blueprint plugin — and #17 and #20 are not runtime-observable at all. Those
+are still worth submitting on static evidence; just do not describe them as runtime-verified in the
+PR. Overstating the evidence is the one thing that would cost credibility across all 21.
+
+The original decision follows, kept because its reasoning is what made the gate worth having.
+
+---
+
+The fixes inventoried in [UPSTREAM.md](UPSTREAM.md) are ready. **Not submitting yet.**
+
+> The count lives in that file and is not repeated here. This ADR previously read "31 verified bug
+> fixes and 4 build-tool fixes" while UPSTREAM.md tabulated 21 source bugs, 4 mob fixes and 2
+> toolchain fixes — and UPSTREAM.md's own header says *"count the rows, do not copy the total into
+> another file."* The copy drifted, exactly as [CONTRIBUTING.md](../CONTRIBUTING.md) warns.
 
 🔴 **The gate, set by the owner:** submit only after MO2 has been *used* for roughly a week and a
 real mod list has been built with it.
@@ -561,3 +589,53 @@ construction. **Do not reintroduce a second copy anywhere, including in CI.**
 **Verified 2026-08-15** end to end from a tree with no `qt/`: 3.32 GB downloaded, all modules
 present, staged and renamed, 23 s. The failure paths were exercised separately — a rejected version
 leaves no `qt.tmp` and no `qt/`, and a pre-existing wrong `qt/` stops configure without deleting it.
+
+---
+
+## ADR-025
+### `RelWithDebInfo` is the only configuration the preset offers
+**2026-08-15 · Accepted**
+
+`CMakePresets.json` sets `CMAKE_CONFIGURATION_TYPES` to `RelWithDebInfo` alone, so the IDE's
+configuration dropdown has one entry.
+
+**Why:** the previous state was worse than either alternative. Debug was selectable, documented as
+"not supported or tested", and produced a genuinely broken build rather than a slow one — `usvfs` is
+built at configure time as RelWithDebInfo whatever the setting says, and the vcpkg runtime DLLs are
+installed from the release tree, so a Debug build mixes CRT configurations across a DLL boundary.
+That is [TRAPS.md](TRAPS.md#vcpkg)'s ABI-mismatch rule, arrived at through the IDE's most obvious
+control.
+
+**A documented warning is not a guard when the wrong choice is one click away and looks like the
+normal one.** Visual Studio's dropdown is where a newcomer goes first, and "Debug" is what it is
+called in every other project they have opened.
+
+**What this costs:** nothing for debugging — RelWithDebInfo carries full PDBs, and breakpoints and
+stepping work. It costs the ability to build an unoptimized MO2, which nobody has asked for and
+which has never been verified to link in this tree anyway.
+
+**Reversing it is one line** in the preset, deliberately: this closes a trap, it does not assert
+that a Debug build is impossible. Anyone who needs one is choosing to find out, which is the
+difference that matters.
+
+---
+
+## ADR-026
+### Show the project in the MO2 Discord before submitting anything upstream
+**2026-08-15 · Accepted**
+
+The [ADR-015](#adr-015) gate is met, and submission is still held. The next step is to show the
+project in the MO2 Discord; whether and when to open PRs is decided after that.
+
+**Why this is a real decision and not a delay.** The 21 fixes are individually defensible, but they
+arrive from a fork org nobody upstream has heard of, alongside a superbuild that proposes replacing
+`mob`. How that lands depends on context the inventory cannot supply — whether the maintainers want
+the fixes as isolated PRs, whether the superbuild interests them at all, and whether anyone objects
+to the fork model. Finding that out costs a conversation. Finding it out *after* opening 21 PRs
+costs 21 awkward withdrawals.
+
+**What it costs, unchanged from ADR-015:** every upstream commit touching those files raises the
+rebase price, and the bugs stay live for upstream users meanwhile.
+
+**What clears it:** the owner's say-so, after the Discord conversation. Nothing else — not a
+reviewer's judgement that the fixes look ready, and not the fact that ADR-015 now reads "gate met".

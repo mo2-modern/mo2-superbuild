@@ -13,7 +13,15 @@ environment script, and a build you cannot drive from an IDE.
 
 This repository replaces that with an ordinary CMake superbuild: the repositories are submodules,
 one `CMakeLists.txt` adds them all, and dependencies resolve in-tree without an install step. There
-is one project to open and one button to press. Nothing in the 34 upstream repositories is modified.
+is one project to open and one button to press.
+
+The submodules under `repos/` are [`mo2-modern`](https://github.com/mo2-modern) forks of the
+upstream projects, not the upstream repositories themselves — they carry a toolchain modernization
+and a set of bug fixes ([UPSTREAM.md](docs/UPSTREAM.md)). What the superbuild does not do is *edit*
+them: the assembly is arranged so that not one line inside those 34 repositories has to change,
+because every changed line is merge surface on every upstream sync
+([ADR-001](docs/DECISIONS.md#adr-001)). Point `MO2_SOURCE_ROOT` at a different checkout and it
+builds that instead.
 
 ## Requirements
 
@@ -62,10 +70,16 @@ Both routes produce `install/bin/ModOrganizer.exe`.
 > installing is not an error — it just means the install tree still holds whatever was last deployed
 > there. See [ADR-023](docs/DECISIONS.md#adr-023).
 
-> **Use RelWithDebInfo.** It is what MO2 ships and the only configuration this tree is built and
-> verified in. The IDE will offer Debug, but `usvfs` is built as RelWithDebInfo regardless and the
-> vcpkg runtime DLLs are installed from the release tree, so a Debug build mixes configurations.
-> Debug builds are not blocked; they are simply not supported or tested.
+> **RelWithDebInfo is the only configuration.** It is what MO2 ships and the only one this tree is
+> built and verified in, so the preset sets `CMAKE_CONFIGURATION_TYPES` to it alone and the IDE's
+> configuration dropdown offers nothing else. It carries full debug symbols; you can set
+> breakpoints and step through code normally.
+>
+> This used to leave Debug selectable-but-unsupported, which was a trap rather than a freedom:
+> `usvfs` is built as RelWithDebInfo regardless of the setting and the vcpkg runtime DLLs are
+> installed from the release tree, so choosing Debug produced a build that mixed configurations
+> across a DLL boundary. If you genuinely need it, remove the line from `CMakePresets.json` — and
+> read [ADR-025](docs/DECISIONS.md#adr-025) first.
 
 `install/` and `build/` are in `.gitignore`, so Visual Studio's Folder View hides them by default.
 Use **Show All Files** in the Solution Explorer toolbar if you want to browse the output.
@@ -100,9 +114,9 @@ One exception, and it is upstream's rather than this project's: `mo2_add_transla
 `git -C repos/<name> checkout -- .` and do not commit it.
 
 The problem a superbuild has to solve here is that the upstream repositories locate each other with
-64 `find_package(mo2-*)` calls, which normally require a prior `install`. Editing those calls would
+63 `find_package(mo2-*)` calls, which normally require a prior `install`. Editing those calls would
 create merge conflicts against 34 projects on every sync, so they are left untouched and satisfied
-three ways: `cmake_common` on `CMAKE_PREFIX_PATH` resolves the 28 `mo2-cmake` calls directly,
+three ways: `cmake_common` on `CMAKE_PREFIX_PATH` resolves the 27 `mo2-cmake` calls directly,
 `cmake/superbuild-redirects/` stands in for the 29 sibling-library calls by asserting the target
 already exists in this build, and the remaining 7 are vcpkg registry ports that need no help.
 

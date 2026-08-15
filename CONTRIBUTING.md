@@ -17,7 +17,7 @@ as an untouched mirror of upstream and does all work on `modern`; see
 
 > **Changing a submodule is not free.** Every edited line is merge surface against 34 upstream
 > projects on every sync, which is why the superbuild goes to some trouble to avoid touching them —
-> for example, the 64 `find_package(mo2-*)` calls are satisfied from outside rather than edited. If
+> for example, the 63 `find_package(mo2-*)` calls are satisfied from outside rather than edited. If
 > a change can be made in this repository instead, make it here.
 
 ## Before you start
