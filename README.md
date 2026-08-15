@@ -141,14 +141,12 @@ reading the result out of the instance log. See [TRAPS.md](docs/TRAPS.md#verific
 
 ## Contributing
 
-The 34 repositories are forks tracking `ModOrganizer2/*`. Each keeps `master` as a pure upstream
-mirror and does all work on `modern`; see [ADR-001](docs/DECISIONS.md#adr-001). Changes to the
-superbuild itself belong in this repository, and changes to MO2 belong in the relevant submodule.
-
-Read [DECISIONS.md](docs/DECISIONS.md) before altering anything structural — most of the
-non-obvious choices here are load-bearing and the reasoning is written down. Please do not
-reintroduce a second copy of any version or module list; several of the recorded failures in
-[TRAPS.md](docs/TRAPS.md) are duplicated facts that drifted apart.
+See [CONTRIBUTING.md](CONTRIBUTING.md). In short: the repositories under `repos/` are forks tracking
+`ModOrganizer2/*`, each keeping `master` as an untouched upstream mirror and doing all work on
+`modern` ([ADR-001](docs/DECISIONS.md#adr-001)); changes to the assembly belong here and changes to
+MO2 belong in the relevant submodule; and please do not add a second copy of any version, module
+list or hash — several of the failures recorded in [TRAPS.md](docs/TRAPS.md) are duplicated facts
+that drifted apart.
 
 ## License
 
