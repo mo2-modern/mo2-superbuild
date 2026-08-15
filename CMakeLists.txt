@@ -250,6 +250,16 @@ if(NOT MO2_QT_DIR AND MO2_AUTO_INSTALL_QT)
 endif()
 
 if(NOT MO2_QT_DIR)
+  # One string per branch, not a list: message() joins list elements with ";",
+  # which puts a stray semicolon in the middle of the sentence.
+  if(NOT MO2_AUTO_INSTALL_QT)
+    set(_mo2_qt_auto_hint
+        "This project can also fetch Qt itself; that is MO2_AUTO_INSTALL_QT, which is currently OFF.")
+  else()
+    set(_mo2_qt_auto_hint
+        "MO2_AUTO_INSTALL_QT is ON, so this was attempted and did not succeed -- the reason is in the output above. Fix that, or install Qt by hand with the command above.")
+  endif()
+
   message(FATAL_ERROR
     "Qt ${MO2_QT_VERSION} (${MO2_QT_ARCH}) was not found.\n"
     "\n"
@@ -264,8 +274,11 @@ if(NOT MO2_QT_DIR)
     "Already have Qt elsewhere? Point at it instead:\n"
     "  cmake --preset vs2026 -DMO2_QT_DIR=<prefix>   (or set QTDIR)\n"
     "\n"
-    "This project can also fetch Qt itself; that is MO2_AUTO_INSTALL_QT, which is\n"
-    "currently OFF.")
+    # Three paths reach this error and only one of them has the option off, so
+    # the sentence has to be conditional. Stating "MO2_AUTO_INSTALL_QT is OFF"
+    # unconditionally was false in exactly the two cases a real user hits: the
+    # download was attempted and failed, or no Python was found to run it.
+    "${_mo2_qt_auto_hint}")
 endif()
 
 message(STATUS "[MO2] Qt: ${MO2_QT_DIR}")
@@ -517,9 +530,18 @@ else()
     "bin/licenses will be EMPTY and the build must not be distributed.")
 endif()
 
-# 7zip's runtime DLL. OPTIONAL because the file only exists once vcpkg has
-# populated the build tree, and a configure-time install() rule is evaluated
-# before that on a clean tree.
+# 7zip's runtime DLL, which vcpkg puts in the build tree rather than anywhere
+# CMake would find on its own.
+#
+# OPTIONAL is defensive, not load-bearing: with the triplet this project uses
+# (x64-windows-static-md) the DLL is present and does get installed. It guards
+# a triplet or feature change that stops producing it, where a hard install rule
+# would fail the install with a path nobody recognises.
+#
+# It is NOT about configure-time ordering. install() rules are *recorded* during
+# configure and *evaluated* during install, so the file's absence at configure
+# time would never have mattered -- an earlier version of this comment claimed
+# otherwise and was simply wrong about how install() works.
 install(FILES "${CMAKE_BINARY_DIR}/vcpkg_installed/${VCPKG_TARGET_TRIPLET}/bin/7zip.dll"
         DESTINATION bin/dlls OPTIONAL)
 
@@ -618,10 +640,6 @@ mo2_add_repo(plugin_python)
 # sets CMAKE_VS_NUGET_PACKAGE_RESTORE.
 mo2_add_repo(installer_fomod_csharp)
 mo2_add_repo(installer_omod)
-#
-#   installer_omod, installer_fomod_csharp
-#                   C++/CLI. MSBuild-only, and installer_omod needs a NuGet
-#                   restore for its .NET references.
 
 # --- build and install are separate steps ------------------------------------------
 # Install is NOT folded into the default build. Build compiles, install deploys; an
