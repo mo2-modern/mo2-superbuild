@@ -80,6 +80,28 @@ deleting `build/usvfs-install` (the stamp file inside it is the guard).
 **One toolchain variable at a time.** [ADR-003](docs/DECISIONS.md#adr-003): do not bump Qt, MSVC and
 Python together, or a regression cannot be attributed.
 
+## Cutting a release
+
+Releases are built by CI from a `v*` tag — never packaged by hand, so the artifacts are the build
+that passed verification rather than whatever was in someone's tree.
+
+1. **Bump `VER_FILEVERSION` and `VER_FILEVERSION_STR`** in `repos/modorganizer/src/version.rc`, in
+   the same commit. The scheme is upstream's version plus a fourth segment
+   ([ADR-028](docs/DECISIONS.md#adr-028)) — 2.5.2.1, then 2.5.2.2. Do **not** take a number upstream
+   still owns.
+2. **Commit it in the submodule**, push, and bump the gitlink here.
+3. **Tag and push:** `git tag -s v2.5.2.1 && git push origin v2.5.2.1`.
+
+The workflow then builds, installs, verifies, packages and publishes. Roughly 45 minutes.
+
+⚠️ **The tag does not set the version — `version.rc` does.** CI fails the run if they disagree,
+rather than producing artifacts named after a version the binaries do not report. If that check
+fires, fix `version.rc` and re-tag; do not rename the tag to match a stale file.
+
+**There is no installer**, and that is structural: upstream's `.exe` comes from
+`ModOrganizer2/modorganizer-Installer`, which this project does not fork. Five of upstream's six
+assets are produced; say so in the release rather than leaving people hunting.
+
 ## Building and verifying
 
 Build instructions are in the [README](README.md); machine setup, troubleshooting and the

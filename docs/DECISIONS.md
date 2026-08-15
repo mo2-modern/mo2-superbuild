@@ -40,6 +40,7 @@ verify) and several decisions look wrong without it.
 | [025](#adr-025) | `RelWithDebInfo` is the only configuration the preset offers | Accepted |
 | [026](#adr-026) | Show the project in the MO2 Discord before submitting anything upstream | Accepted |
 | [027](#adr-027) | `mob` is retired — the superbuild is the only way to build this | Accepted |
+| [028](#adr-028) | Releases use upstream's version plus a fourth segment | Accepted |
 
 ---
 
@@ -683,3 +684,38 @@ that no submodule has an `upstream` remote, so there is currently no way to comp
 `ModOrganizer2/*` at all. The `tidy/` Ninja trees and `regen-tidy.ps1` are gone too, so clang-tidy
 and clangd have no compile database. Neither has been re-created here; both are real gaps, not
 oversights to discover later.
+
+---
+
+## ADR-028
+### Releases use upstream's version plus a fourth segment
+**2026-08-15 · Accepted**
+
+The fork releases as **2.5.2.1** — upstream's version, plus a build number in the fourth segment.
+The next one is 2.5.2.2. When upstream ships 2.5.3, the fork rebases onto it and becomes 2.5.3.1.
+
+**Why not 2.5.3 or 2.6.0.** Both are numbers upstream still owns. Taking either means a build of
+this fork reports a version string upstream recognises as its own, so a bug report against "2.6.0"
+lands on them for code they never wrote — and if upstream later ships that number, two different
+builds share it permanently. 2.6.0 also overstates the change: this fork adds no user-facing
+features, it is a toolchain modernization plus bug fixes, and a build number says that honestly.
+
+**Why the fourth segment is safe.** Upstream has never used one, so it is unclaimed. It sorts
+correctly in both directions — after 2.5.2, before 2.5.3 — so the update check does the right thing
+whether upstream is behind or ahead.
+
+**Checked, not assumed.** `version.rc` sets `FILEFLAGS (0)`, so `VS_FF_PRERELEASE` is unset and
+`createVersionInfo()` (`modorganizer/src/shared/util.cpp`) takes the numeric path, building
+`Version(major, minor, patch, subpatch)` straight from the Windows file version. uibase's
+`versioning.cpp` renders the subpatch whenever it is non-zero, and its parser regex accepts four
+segments explicitly.
+
+🪤 **A semver-style `2.5.2+modern` cannot work, and the reason is worth knowing before someone
+tries.** uibase's modern `Version` parser does accept `+buildmetadata` — but the runtime never sees
+a string. `createVersionInfo()` reads the numeric `VS_FIXEDFILEINFO`, so metadata cannot survive the
+trip. The older `VersionInfo` parser is narrower still: `parseReleaseType` understands only
+`prealpha`, `alpha`, `beta`, `rc` and a leading `a`/`b`.
+
+**`version.rc` is the source of truth, not the tag.** The release workflow fails the run if a `v*`
+tag disagrees with it, so a mistyped tag cannot produce artifacts named after a version the binaries
+do not report.
