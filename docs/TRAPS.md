@@ -363,12 +363,38 @@ It does **not** cover opening the **folder**, which is what the README tells peo
 CMake/Open-Folder mode Visual Studio never reads the generated `.vcxproj`: it builds its
 startup-item list from the CMake **file API**, whose artifact path for the `organizer` target is
 `build\modorganizer\src\RelWithDebInfo\ModOrganizer.exe` — the copy with no plugins, no Qt runtime
-and no usvfs beside it, which cannot start. `.vs\launch.vs.json` is committed to override that.
+and no usvfs beside it, which cannot start. Launching it fails with *"The application has failed to
+start because the application configuration is incorrect"*, which is the side-by-side loader
+reporting missing dependencies rather than anything wrong with the executable.
 
-**This is the same shape as the install trap above**, and it is worth naming: a mechanism was
-verified to be *set correctly* without checking that the flow the documentation recommends is the
-one that *reads* it. Two different settings, same blind spot, both found in one day. **When
-something is configured per-IDE-mode, name which mode you verified.**
+`.vs\launch.vs.json` overrides that, and **the way it must be written is not the obvious one**:
+
+```json
+{ "type": "default", "project": "install\\bin\\ModOrganizer.exe", "currentDir": "..." }
+```
+
+`project` points at the **executable**, not at `CMakeLists.txt`.
+
+🔴 **Do not try to redirect a CMake target with `program`.** `program` and `currentDir` are
+documented **only** for the `cppgdb` and `cppdbg` configuration types — the remote/WSL ones — where
+`program` is specified as *"the **Unix** path to the application to debug."* For a local
+`"type": "default"` entry the only supported properties are `projectTarget`, `env` and `args`, plus
+`name` and `project`.
+
+The failure mode is what makes this worth writing down: a config carrying `projectTarget` +
+`program` **is not rejected**. Visual Studio reads `name`, so the startup item appears in the
+dropdown with the label you chose and looks exactly right — then silently ignores `program` and
+launches `projectTarget`'s artifact from the build tree. Two attempts were shipped in this shape
+before anyone pressed Run. **A launch config that appears in the dropdown has not been verified;
+only pressing Run verifies it.**
+
+⚠️ **The startup item depends on a file that does not exist yet on a fresh clone.** Because
+`project` is a path to `install\bin\ModOrganizer.exe`, the entry is only useful after the first
+successful **install**. Build and install first, then look for it.
+
+**This is the same shape as the install trap above:** a mechanism was verified to be *set
+correctly* without checking that the flow the documentation recommends is the one that *reads* it.
+**When something is configured per-IDE-mode, name which mode you verified.**
 
 🔴 **The superbuild emits 144 `CMake Error` lines in an IDE and none from the command line — and
 exits 0 either way.** Opening `mo2-ide` in Rider (or CLion, VS Code, Visual Studio) produces a wall

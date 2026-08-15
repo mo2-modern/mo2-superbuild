@@ -42,7 +42,8 @@ configure stops and tells you to run `git submodule update --init`.
    automatically.
 2. **Build → Build All.**
 3. **Build → Install mo2.**
-4. Select the **ModOrganizer 2 (install tree)** startup item and run.
+4. Select the **ModOrganizer 2 (install tree)** startup item and run. It appears once step 3 has
+   produced the executable, so build and install before looking for it.
 
 ### Command line
 
