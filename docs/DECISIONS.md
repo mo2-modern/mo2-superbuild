@@ -147,16 +147,22 @@ move.
 ### Build Python and tooling Python are configured separately
 **2026-08-09 · Accepted**
 
-Verified with `py -0p`: the `py` launcher defaults to 3.14, and bare `python` resolves to 3.13.
 Always invoke tooling as `py -3.14 -m <tool>`. Never rely on bare `python`.
 
-**Why this split is correct and must not be unified:** 3.13 is the *build's* Python — CMake finds it
-through `HKCU\SOFTWARE\Python\PythonCore\3.13`, not PATH. 3.14 is *tooling's* — `aqt` and
-`pre-commit` live in its user site-packages and fail under 3.13 with "No module named aqt".
+**What is separate is the selection mechanism, not the version.** The *build's* Python is found by
+CMake through `HKCU\SOFTWARE\Python\PythonCore\<version>`, not PATH. *Tooling's* is found through
+the `py` launcher, and `aqt` and `pre-commit` live in that interpreter's user site-packages. Neither
+mechanism can see an interpreter the other one found, so both have to be satisfied independently —
+that is the part of this decision that still binds.
 
-The build has since moved to Python 3.14 via `cmake_common`. The separation still matters,
-because the two are selected by different mechanisms: the build's through the registry, tooling's
-through the launcher.
+**Both are 3.14 today**, since `cmake_common` commit `686fdeb versions: target Python 3.14`.
+One correctly registered 3.14 with development headers therefore satisfies both roles: verified
+2026-08-15 by configuring and building the whole tree on a machine whose registry listed 3.14 and
+nothing else.
+
+🕰 **This ADR originally read "3.13 is the build's Python" and "this split must not be unified",**
+written when the two roles really did need different versions. Superseded by the bump above; the
+mechanism split survives it, the version split does not.
 
 ---
 
@@ -479,3 +485,64 @@ lines of which two-thirds is archive.
 
 **The old `3.x` section numbers are preserved inside `history/PHASE3-WARNINGS.md`** so commit
 messages and older notes citing them still resolve. Do not renumber them.
+
+---
+
+## ADR-023
+### Building installs, via a target in `ALL` rather than the solution setting alone
+**2026-08-15 · Accepted**
+
+`CMAKE_VS_INCLUDE_INSTALL_TO_DEFAULT_BUILD` stays, and a `mo2-install` custom target in `ALL` is
+added beside it. It depends on every target collected by walking `SUBDIRECTORIES` /
+`BUILDSYSTEM_TARGETS`, so it runs last, and it invokes `cmake --install` with `$<CONFIG>`.
+
+**Why:** the setting alone only covers opening the generated `build\mo2.slnx`. The flow the README
+documents — open the *folder* — is Visual Studio's CMake mode, which builds via `cmake --build` and
+never reads the solution's project list. Measured on a clean clone: exit 0, 0 errors, 0 warnings,
+46 projects linked, and **no `install/` at all**, leaving only the `build\` copy of
+`ModOrganizer.exe`, which has no plugins, Qt runtime or usvfs beside it and cannot start.
+
+**Why a collected dependency list and not a written one:** a hand-listed set silently stops covering
+repositories as they are added, and the failure is a race rather than an error.
+
+**Cost, measured warm:** `ALL_BUILD` alone 5.3 s, with the install 12.8 s. Accepted, because the
+install is idempotent — every rename in `mo2_deploy_qt` is guarded by an `EXISTS` test.
+
+**Rejected:** telling people to build the `INSTALL` target by hand. "Open the folder and press
+build" is the entire premise of this repository; a second mandatory step is the thing it exists to
+remove.
+
+---
+
+## ADR-024
+### Configure downloads Qt, and `MO2_QT_MODULES` is the only copy of the module list
+**2026-08-15 · Accepted**
+
+Qt is fetched automatically when it cannot be found (`MO2_AUTO_INSTALL_QT`, default ON), and the
+module list lives in exactly one place, from which both the download and the printed fallback are
+generated.
+
+**This reverses the earlier position** that 3.3 GB must never be pulled silently inside an IDE
+configure. That position was right about the risks and wrong that they were inherent:
+
+| Objection | What answers it |
+|---|---|
+| silent | aqt's output is not captured, so it streams to the CMake output pane, behind a banner naming the size first |
+| no recovery | staged into `qt.tmp/`, renamed to `qt/` only after `Qt6Config.cmake` verifies — a dropped connection leaves *no* `qt/`, so the next configure retries |
+| not the user's choice | `MO2_AUTO_INSTALL_QT=OFF` prints the command and stops, exactly as before |
+
+It never deletes: a `qt/` holding the wrong Qt is an error, not something to clear. And aqt is
+installed into a throwaway venv under `build/`, because configuring a project must not mutate the
+site-packages of an interpreter used for other things.
+
+**The single module list is the more important half**, and would be worth doing even without the
+download. The list was duplicated across `CMakeLists.txt`, `README.md`, `docs/BUILD.md` and
+`.github/workflows/build.yml`; they drifted, and [TRAPS.md](TRAPS.md#toolchain) records the four
+months in which `qtwebsockets` and `qtnetworkauth` were missing from the documented copies, so
+anyone following this project's own instructions on a clean machine could not configure. Deriving
+both the executed and the printed command from `MO2_QT_MODULES` makes them the same string by
+construction. **Do not reintroduce a second copy anywhere, including in CI.**
+
+**Verified 2026-08-15** end to end from a tree with no `qt/`: 3.32 GB downloaded, all modules
+present, staged and renamed, 23 s. The failure paths were exercised separately — a rejected version
+leaves no `qt.tmp` and no `qt/`, and a pre-existing wrong `qt/` stops configure without deleting it.

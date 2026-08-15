@@ -1,29 +1,55 @@
 # MO2 — open, build, run
 
+Every Mod Organizer 2 repository, built as one CMake project. Open the folder, press build, get a
+working MO2. No `env.ps1`, no mob, no environment variables.
+
+## You need
+
+| | |
+|---|---|
+| **Visual Studio 2026**, with the **v145** toolset | `.vsconfig` here lists the components to select, and VS offers to install them when you open the folder |
+| **Python 3.14**, with the **development headers** | use the python.org installer — a Store or embeddable build may lack `Python.h`, and CMake finds Python through the registry, not `PATH` |
+| **git** on `PATH` | needed to clone, and again during configure: Qt's installer is fetched with `pip install git+https://…` |
+| **~25 GB free** | Qt 3.3 GB, the vcpkg packages, ~1.9 GB of usvfs build trees, and the build and install trees |
+
+That is the whole list — you do not need a standalone CMake, and one registered Python 3.14 serves
+both the build and the Qt installer. Qt, vcpkg, the repositories and every dependency are fetched
+for you.
+
+## Then
+
 ```
 git clone --recursive https://github.com/mo2-modern/mo2-superbuild
 ```
 
-Open the folder in **Visual Studio 2026** or **Rider**, pick the `vs2026` preset, build.
-No `env.ps1`, no mob, no environment variables.
+1. Open the **folder** in Visual Studio 2026 or Rider.
+2. Pick the **`vs2026`** preset. Configure starts on its own.
+3. **Build → Build All.** This also installs — that is what makes the result runnable.
+4. Set the startup item to **`ModOrganizer 2 (install tree)`** and press Run.
 
-`--recursive` matters: it fetches the 34 MO2 repositories into `repos/` **and vcpkg into `vcpkg/`**,
-pinned to the same commit every manifest names as its baseline, so the tool and the dependency graph
-cannot drift apart. vcpkg bootstraps itself on the first configure — there is no separate step.
+⚠️ **Step 4 is Visual Studio only.** It relies on `.vs/launch.vs.json`, which Rider does not read.
+In Rider, run `install\bin\ModOrganizer.exe` directly, or add a native-executable run configuration
+pointing at it. Everything before step 4 works the same in both.
 
-**Cloned without `--recursive`?** `git submodule update --init` fixes it. Configure stops with that
-instruction rather than a missing-toolchain-file error, so you cannot get far without noticing.
+⏱ **The first configure takes a while and looks idle in the middle of it.** It downloads Qt
+(3.3 GB), resolves ~112 vcpkg packages, and builds `usvfs` twice — once per architecture, because
+it ships both. The usvfs step prints nothing while it runs. It is not stuck. Later configures skip
+all of it.
 
-Already have a checkout from mob? `MO2_SOURCE_ROOT` overrides `repos/`, so you can point at it and
-skip cloning several GB twice. vcpkg is still taken from `vcpkg/` — fetch just that one with
-`git submodule update --init vcpkg` (0.14 GB), or point `-DCMAKE_TOOLCHAIN_FILE=` at a vcpkg you
-already have.
+▶ **Run must launch out of `install\`.** The `ModOrganizer.exe` in `build\` has no plugins, no Qt
+runtime and no usvfs beside it, and cannot start. Step 4 picks the right one.
 
-⏱ **First configure is slow** — it bootstraps vcpkg and builds ~112 dependency packages. Later
-configures reuse them.
+## If something looks wrong
 
-Verified from a clean clone into an empty directory: configure, build, 0 errors, 0 warnings,
-`ModOrganizer.exe` produced.
+| | |
+|---|---|
+| Cloned without `--recursive` | `git submodule update --init`. Configure stops and says so rather than failing on a missing toolchain file |
+| Run starts the wrong executable | pick the `ModOrganizer 2 (install tree)` startup item; if it is absent see [TRAPS.md](docs/TRAPS.md#ides) |
+| 25 submodules show as modified after a build | expected — `lupdate` rewrites `*_en.ts` in place. Noise, not damage. [TRAPS.md](docs/TRAPS.md#superbuild-and-clone) |
+| A green build with an empty `install\` | should be impossible now; if you see it, read [ADR-023](docs/DECISIONS.md#adr-023) |
+| You already have Qt | `-DMO2_QT_DIR=<prefix>`, or set `QTDIR`. Skips the download |
+| You would rather install Qt yourself | `-DMO2_AUTO_INSTALL_QT=OFF` — configure prints the exact `aqt` command and stops |
+| You already have an MO2 checkout from mob | `-DMO2_SOURCE_ROOT=<path>` reuses it instead of cloning several GB twice |
 
 ## Documentation
 
@@ -36,103 +62,62 @@ Verified from a clean clone into an empty directory: configure, build, 0 errors,
 | [docs/UPSTREAM.md](docs/UPSTREAM.md) | Bugs found here that belong to upstream MO2 |
 
 Some of these describe `mob`, the original build orchestrator, and the working tree it needs. That
-tree is not published; `mob` still works and is still what produces `build\install`. Treat those
-parts as background.
+tree is not published. Treat those parts as background.
 
 ## What this is
 
-A superbuild: a single CMake project that configures every MO2 repository at once, so there
-is one solution to open and one button to press. It replaces the mob-driven cycle where each
-repository had to be built *and installed* before the next could even configure.
+A superbuild: one CMake project that configures every MO2 repository at once, so there is one
+solution to open and one button to press. It replaces the mob-driven cycle in which each repository
+had to be built *and installed* before the next could even configure.
 
-It holds no sources of its own. The repositories arrive as submodules under `repos/`, and nothing is
-ever written inside them. Everything this project produces lands in `build/` and `install/`.
+It holds no sources of its own. The repositories arrive as submodules under `repos/`, and everything
+this project produces lands in `build/` and `install/`.
 
 ```
 CMakeLists.txt              the superbuild
 CMakePresets.json           the vs2026 preset an IDE reads
 vcpkg.json                  one manifest for the whole project
 cmake/superbuild-redirects/ makes find_package(mo2-*) work without installing first
+.vs/launch.vs.json          aims Run at install\, in Open-Folder mode
 ```
 
-## Prerequisites
+**usvfs is the one repository not simply added as a subdirectory.** It is dual-architecture by
+design, and a single CMake configure produces one architecture, so both are built and installed at
+*configure* time. `ExternalProject_Add` is the usual answer and is wrong here: it builds at *build*
+time, while `modorganizer`'s `find_package(usvfs)` must resolve during configure.
 
-| | |
-|---|---|
-| Visual Studio 2026 with the **v145** toolset | the C++/CLI plugins need MSBuild; no Ninja IDE can build them |
-| Qt 6.11.1 (msvc2022_64) | 3.3 GB — see below. The **only** thing you must install yourself |
-
-Everything else — the 34 repositories, vcpkg itself, spdlog, 7zip, boost, lz4, stylesheets,
-Explorer++ — comes from `--recursive`, from vcpkg, or from a download on the first configure.
-
-### Qt
-
-Qt is the one thing this project cannot fetch for itself, and it is **not** downloaded
-automatically: 3.3 GB pulled silently inside an IDE configure, with no progress and no good
-recovery if the network drops, is worse than being told exactly what to run. Configure finds Qt in
-`./qt/`, in a sibling `mo2-modern/tools/Qt/`, or via `QTDIR`, and otherwise prints this:
-
-```
-py -3.14 -m pip install git+https://github.com/miurahr/aqtinstall
-py -3.14 -m aqt install-qt windows desktop 6.11.1 win64_msvc2022_64 \
-    -m qtwebengine qtwebchannel qtpositioning qtserialport qtimageformats \
-       qtwebsockets qtnetworkauth qttasktree \
-    -O ./qt
-```
-
-Two details that are easy to get wrong:
-
-- **aqt must come from git.** The PyPI release lags Qt's repository layout and fails on current
-  versions.
-- **The module list is not optional.** Upstream CI compiles MO2 without ever launching it, so its
-  list omits runtime-only modules. Without `qtimageformats` you get 4 image plugins instead of 9,
-  and MO2 silently cannot render TGA, TIFF or WebP mod previews — nothing fails at build time.
-
-Qt cannot come from vcpkg at all, because MO2 needs WebEngine, which means building Chromium.
-
-Already have Qt? `cmake --preset vs2026 -DMO2_QT_DIR=<prefix>`, or set `QTDIR`.
-
-The preset points `toolchainFile` at a **path**, deliberately, rather than `$env{VCPKG_ROOT}`:
-Visual Studio's `vcvarsall.bat` overwrites that variable with VS's own bundled vcpkg, so an IDE
-build that trusted it would silently resolve every dependency against the wrong vcpkg. Verified
-by configuring with `VCPKG_ROOT` deliberately pointed at VS's copy — it builds correctly anyway.
-
-## Pointing it at a different checkout
-
-`MO2_SOURCE_ROOT` defaults to `repos/` when the submodules are populated, and to a sibling
-`mo2-modern` checkout otherwise. To point somewhere else:
-
-```powershell
-cmake --preset vs2026 -DMO2_SOURCE_ROOT=D:/some/other/mo2/build/build
-```
-
-The build fails immediately with a clear message if the path is not an MO2 checkout, rather
-than producing a confusing `find_package` error twenty lines later.
+**Nothing upstream was edited.** The **64** `find_package(mo2-*)` calls across the repositories are
+untouched, because every edited line is merge surface on every sync. They resolve three ways:
+`cmake_common` on `CMAKE_PREFIX_PATH` covers the **28** `mo2-cmake` calls with no install step;
+`cmake/superbuild-redirects/` stands in for the **29** sibling-library calls; the remaining **7**
+(`mo2-dds-header`, `mo2-libbsarch`) are vcpkg registry ports and need nothing. See
+[ADR-001](docs/DECISIONS.md#adr-001).
 
 ## Status
 
-**All 34 repositories build**, at 0 errors and 0 warnings, and MO2 built this way has been run:
-usvfs loads from this tree and installs 46 hooks (45 `type overwrite`, 1 `type chained patch`,
-0 errors), the same count the mob-driven build produces.
+**All 33 buildable repositories build**, at 0 errors and 0 warnings. (`repos/` holds 34 submodules;
+`cmake_common` is CMake modules and is consumed, not built.) Verified 2026-08-15 from a cold tree —
+no `build/`, no `qt/`, no `install/` — running nothing but `cmake --preset vs2026` and
+`cmake --build build --config RelWithDebInfo`:
+
+| | |
+|---|---|
+| Qt | downloaded automatically: 3.32 GB, all modules, 23 s |
+| vcpkg | 112 packages restored from a local binary cache in 6.9 s |
+| configure | 0 errors, 0 warnings, 309 s — nearly all of it `usvfs`, built twice |
+| build | 0 errors, 0 warnings; 471 translation units, 46 projects linked |
+| install | populated by the build itself, no second command |
+| launch | reaches the first-run *Creating an instance* window, loading `usvfs_x64.dll`, `uibase.dll`, `Qt6Core.dll` and `platforms\qwindows.dll` from this tree |
+
+⚠️ **That 309 s is not a first-run estimate.** vcpkg's 112 packages came from a *local* cache. On a
+machine that has never built them, that step compiles from source and dominates everything else.
+
+⚠️ **A launch is not a usvfs verification.** It proves the DLL loads, not that it hooks anything.
+That needs a game launched **through** MO2 and is read out of the instance's `logs\usvfs-*.log` —
+see [TRAPS.md](docs/TRAPS.md#verification). An earlier run on a machine with a game installed showed
+46 hooks (45 `type overwrite`, 1 `type chained patch`), matching the mob-driven build; that was not
+re-measured here.
 
 Install parity against the mob-built tree is **2 files**, both `usvfs_*targets-release.cmake` —
-CMake export files for the Release configuration, which this build does not produce because MO2
-ships RelWithDebInfo.
-
-**usvfs is the one repository that is not simply added as a subdirectory.** It is
-dual-architecture by design, and a single CMake configure produces one architecture, so both are
-built and installed at *configure* time. `ExternalProject_Add` is the usual answer and does not
-work here: it builds at *build* time, while `modorganizer`'s `find_package(usvfs)` has to resolve
-during configure. The first configure therefore takes a few minutes; every later one skips it.
-
-## Why nothing upstream was edited
-
-The 63 `find_package(mo2-* CONFIG REQUIRED)` calls across the repositories are untouched, because
-every edited line is merge surface against 34 upstream projects on every sync. Two mechanisms
-avoid touching them:
-
-- **`mo2-cmake` (27 calls)** — `cmake_common/mo2-cmake-config.cmake` is self-contained, so putting
-  `cmake_common` on `CMAKE_PREFIX_PATH` resolves all 27 with no install step. mob already did this.
-- **sibling packages (29 calls)** — their real configs include a `*-targets.cmake` that only exists
-  after `install(EXPORT)`. `cmake/superbuild-redirects/` stands in, asserting the target already
-  exists in this build.
+Release-configuration CMake exports, which this build does not produce because MO2 ships
+RelWithDebInfo.

@@ -1,0 +1,13 @@
+{
+  "version": "0.2.1",
+  "configurations": [
+    {
+      "type": "default",
+      "project": "CMakeLists.txt",
+      "projectTarget": "ModOrganizer.exe (modorganizer\\src\\ModOrganizer.exe)",
+      "name": "ModOrganizer 2 (install tree)",
+      "program": "${workspaceRoot}\\install\\bin\\ModOrganizer.exe",
+      "currentDir": "${workspaceRoot}\\install\\bin"
+    }
+  ]
+}

@@ -14,6 +14,16 @@ claude.md
 # is source and must be committed. Only ignore IDE-generated cmake build dirs.
 cmake-build-*/
 
+# Qt ---------------------------------------------------------------------------
+# README and CMakeLists both tell you to install Qt into ./qt, and CMakeLists
+# auto-detects it there. That is 3.3 GB, so without this rule following the
+# project's own instructions leaves `git status` full of it -- and puts it one
+# careless `git add -A` away from being committed.
+/qt/
+# The staging directory the auto-install downloads into before it is renamed to
+# qt/. It should never survive a configure, but it exists while one is running.
+/qt.tmp/
+
 # CMake ------------------------------------------------------------------------
 CMakeCache.txt
 CMakeFiles/
@@ -35,7 +45,10 @@ vcpkg_installed/
 /vcpkg-cache/
 
 # Visual Studio ------------------------------------------------------------------
-.vs/
+# `.vs/*` and not `.vs/`: git cannot re-include a file whose parent directory is
+# excluded, so the wholesale rule would make the negation below a no-op.
+.vs/*
+!.vs/launch.vs.json
 *.sln.docstates
 *.suo
 *.user

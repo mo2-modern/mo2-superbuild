@@ -6,9 +6,10 @@ compiler output. They are documented there, not repeated here.
 
 ## There are two ways to build
 
-**The superbuild** is the one you want. Clone this repository, install Qt, open the folder in Visual
-Studio or Rider, build. The steps are in the [README](../README.md); nothing below is needed for it
-except [Verification](#verification), which applies to both.
+**The superbuild** is the one you want. Clone this repository, open the folder in Visual Studio or
+Rider, build — Qt installs itself on the first configure ([ADR-024](DECISIONS.md#adr-024)). The
+steps are in the [README](../README.md); nothing below is needed for it except
+[Verification](#verification), which applies to both.
 
 **mob** is the original orchestrator. It still works, it is still what produces `build\install`, and
 both paths are kept green. It needs a separate working tree that is not published, so the setup
@@ -28,7 +29,7 @@ Six steps, once per machine. Skip this if you are using the superbuild.
 |---|---|---|
 | Visual Studio 2026 | with the **v145** toolset | the C++/CLI plugins need MSBuild. No Ninja-only IDE can build them |
 | CMake | 4.4.2 | standalone, not the one bundled with VS. It must come first on `PATH` |
-| Python | 3.13 **and** 3.14 | 3.13 is the build's, found through the registry. 3.14 is tooling's |
+| Python | 3.14, with the **development headers** | both the build's and tooling's. `cmake_common/mo2_versions.cmake` pins `MO2_PYTHON_VERSION` to 3.14, and `plugin_python` asks for it `EXACT` |
 | Git, `gh` | any recent | `gh` is used for fork and PR work |
 | LLVM | 22.1.8 | for `clang-tidy` and `clangd`. Not required to build |
 
@@ -44,13 +45,18 @@ its own task, which is why a recursive clone alone does not produce a buildable 
 **3. Install Qt.** 3.3 GB. It cannot come from vcpkg, because MO2 needs WebEngine, which means a
 Chromium build.
 
+🔁 **Do not copy a module list into this file.** The authoritative one is `MO2_QT_MODULES` in the
+superbuild's `CMakeLists.txt`, and the superbuild both installs from it and prints it. Get the exact
+command by running a configure with the download turned off:
+
 ```powershell
-py -3.14 -m pip install git+https://github.com/miurahr/aqtinstall
-py -3.14 -m aqt install-qt windows desktop 6.11.1 win64_msvc2022_64 `
-    -m qtwebengine qtwebchannel qtpositioning qtserialport qtimageformats `
-       qtwebsockets qtnetworkauth qttasktree `
-    -O F:\dev\mo2-modern\tools\Qt
+cmake --preset vs2026 -DMO2_AUTO_INSTALL_QT=OFF
 ```
+
+It stops with the full `aqt` command, correct by construction. Change `-O` to the mob tree's
+`tools\Qt` if that is the tree you are populating. This indirection is deliberate: this file used to
+carry its own copy of the list, it drifted, and two required modules went missing from it for four
+months — see [TRAPS.md](TRAPS.md#toolchain).
 
 Two things are easy to get wrong. **aqt must come from git**: the PyPI release lags Qt's repository
 layout. **The module list is not optional**, and it fails in two directions:

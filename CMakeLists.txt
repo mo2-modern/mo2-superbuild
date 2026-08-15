@@ -76,13 +76,57 @@ message(STATUS "[MO2] sources: ${MO2_SOURCE_ROOT}")
 # Qt is the one prerequisite this project cannot provide for itself. It cannot be
 # built through vcpkg: MO2 needs WebEngine, which means a Chromium build.
 #
-# It is deliberately NOT downloaded automatically. It is 3.3 GB, and a configure
-# step that silently pulls that inside an IDE -- with no progress, and no good
-# recovery if the network drops halfway -- is worse than being told precisely
-# what to run. Discovery is automatic; acquisition is one command, printed below.
+# It IS downloaded automatically, and the three objections that used to stop that
+# are engineered against rather than argued with:
+#
+#   silent      aqt's output is NOT captured into a variable, so it streams to the
+#               IDE's CMake output pane exactly as it would in a terminal, behind a
+#               banner that names the size before anything starts.
+#   recovery    it installs into qt.tmp/ and is renamed into qt/ only after
+#               Qt6Config.cmake is verified present. A dropped connection therefore
+#               leaves NO qt/ at all, and the next configure retries from scratch --
+#               the failure worth engineering against is not a slow download, it is
+#               a half-download that looks complete and fails 30 minutes later.
+#   consent     MO2_AUTO_INSTALL_QT=OFF restores the old behaviour exactly: print the
+#               command and stop.
+#
+# It also installs aqt into a throwaway venv under build/ rather than into the user's
+# Python. Configuring a project should not mutate the site-packages of an interpreter
+# the user uses for other things.
 set(MO2_QT_VERSION "6.11.1" CACHE STRING "Qt version to build against")
 set(MO2_QT_ARCH "msvc2022_64" CACHE STRING "Qt build to use; msvc2022_64 links fine against v145")
 set(MO2_QT_DIR "" CACHE PATH "Qt prefix. Auto-detected when empty")
+set(MO2_AUTO_INSTALL_QT ON CACHE BOOL "Download Qt with aqt when it cannot be found")
+
+# --- the Qt module list, defined exactly ONCE -----------------------------------
+# This list used to be copy-pasted into four places: the FATAL_ERROR text below,
+# README.md, docs/BUILD.md and .github/workflows/build.yml. They drifted, and
+# docs/TRAPS.md records what that cost -- the live instructions lost qtwebsockets
+# and qtnetworkauth for four months, so anybody following this project's own
+# documentation on a clean machine could not configure, and no local build could
+# expose it because every machine here already had a fuller Qt from earlier work.
+#
+# Everything below derives from this variable: the command that RUNS and the command
+# that is PRINTED are now the same string by construction, so they cannot disagree
+# again. Change the modules here and nowhere else.
+#
+# The list fails in two directions, which is why it is not "optional extras":
+#
+#   qtwebsockets, qtnetworkauth   BUILD requirements, both named by
+#                                 modorganizer/src/CMakeLists.txt. Omitting either
+#                                 stops configure with "Failed to find required Qt
+#                                 component" -- and only after vcpkg has built
+#                                 everything, so it costs a full run to discover.
+#   qtimageformats                RUNTIME requirement, and it fails SILENTLY.
+#                                 Upstream CI compiles MO2 without launching it, so
+#                                 its list omits runtime-only modules; without this
+#                                 one MO2 ships 4 image plugins instead of 9 and
+#                                 cannot render TGA, TIFF or WebP mod previews, with
+#                                 nothing failing at build time.
+set(MO2_QT_MODULES
+    qtwebengine qtwebchannel qtpositioning qtserialport qtimageformats
+    qtwebsockets qtnetworkauth qttasktree
+    CACHE STRING "Qt modules to install; the build needs all of them")
 
 # Validate an explicitly supplied prefix too, rather than only an auto-detected
 # one: a wrong -DMO2_QT_DIR should say so here, not fail later inside find_package
@@ -104,6 +148,95 @@ if(NOT MO2_QT_DIR)
   endforeach()
 endif()
 
+# --- acquire it ------------------------------------------------------------------
+# Rendered from MO2_QT_MODULES so the printed fallback cannot drift from what runs.
+string(JOIN " " _mo2_qt_modules_text ${MO2_QT_MODULES})
+set(_mo2_qt_manual_instructions
+  "  py -3 -m pip install git+https://github.com/miurahr/aqtinstall\n"
+  "  py -3 -m aqt install-qt windows desktop ${MO2_QT_VERSION} win64_${MO2_QT_ARCH} \\\n"
+  "      -m ${_mo2_qt_modules_text} \\\n"
+  "      -O \"${CMAKE_CURRENT_LIST_DIR}/qt\"\n")
+
+if(NOT MO2_QT_DIR AND MO2_AUTO_INSTALL_QT)
+  set(_mo2_qt_dest "${CMAKE_CURRENT_LIST_DIR}/qt")
+  set(_mo2_qt_tmp "${CMAKE_CURRENT_LIST_DIR}/qt.tmp")
+
+  # Refuse rather than delete. Getting here means qt/ exists but holds no usable
+  # Qt6Config.cmake; removing several GB that somebody may have put there on purpose
+  # is not a decision a configure step gets to make silently.
+  if(EXISTS "${_mo2_qt_dest}")
+    message(FATAL_ERROR
+      "${_mo2_qt_dest} exists but does not contain Qt ${MO2_QT_VERSION} "
+      "(${MO2_QT_ARCH}).\nExpected: "
+      "${_mo2_qt_dest}/${MO2_QT_VERSION}/${MO2_QT_ARCH}/lib/cmake/Qt6/Qt6Config.cmake\n"
+      "Delete it and configure again, or point -DMO2_QT_DIR= at a good Qt.")
+  endif()
+
+  find_program(MO2_PYTHON_FOR_AQT NAMES py python
+               DOC "Python used only to run aqt when Qt has to be downloaded")
+
+  if(NOT MO2_PYTHON_FOR_AQT)
+    message(WARNING "[MO2] Qt is missing and no Python was found to install it with.")
+  else()
+    if(MO2_PYTHON_FOR_AQT MATCHES "py\\.exe$")
+      set(_mo2_py "${MO2_PYTHON_FOR_AQT}" -3)   # the launcher needs to be told
+    else()
+      set(_mo2_py "${MO2_PYTHON_FOR_AQT}")
+    endif()
+
+    message(STATUS "")
+    message(STATUS "==============================================================")
+    message(STATUS "[MO2] Qt ${MO2_QT_VERSION} (${MO2_QT_ARCH}) was not found.")
+    message(STATUS "[MO2] Downloading it now -- this is about 3.3 GB and will take")
+    message(STATUS "[MO2] a while. Progress follows. Set MO2_AUTO_INSTALL_QT=OFF")
+    message(STATUS "[MO2] to be given the command instead of having it run.")
+    message(STATUS "==============================================================")
+    message(STATUS "")
+
+    # A private venv: installing aqt must not mutate the user's interpreter.
+    set(_mo2_venv "${CMAKE_BINARY_DIR}/qt-installer-venv")
+    execute_process(COMMAND ${_mo2_py} -m venv "${_mo2_venv}"
+                    RESULT_VARIABLE _mo2_rc)
+    if(NOT _mo2_rc EQUAL 0)
+      message(FATAL_ERROR "[MO2] could not create a venv to run aqt from.\n"
+        "Install Qt by hand instead:\n" ${_mo2_qt_manual_instructions})
+    endif()
+
+    # aqt from git, never PyPI: the released version lags Qt's repository layout
+    # and fails outright on current Qt versions.
+    execute_process(
+      COMMAND "${_mo2_venv}/Scripts/python.exe" -m pip install
+              --disable-pip-version-check
+              "git+https://github.com/miurahr/aqtinstall"
+      RESULT_VARIABLE _mo2_rc)
+    if(NOT _mo2_rc EQUAL 0)
+      message(FATAL_ERROR "[MO2] could not install aqt (needs network, and git on "
+        "PATH for a git+https install).\nInstall Qt by hand instead:\n"
+        ${_mo2_qt_manual_instructions})
+    endif()
+
+    # Into qt.tmp, never straight into qt: see the header comment. No OUTPUT_VARIABLE
+    # anywhere in this block -- that is what keeps the download visible.
+    execute_process(
+      COMMAND "${_mo2_venv}/Scripts/python.exe" -m aqt install-qt
+              windows desktop "${MO2_QT_VERSION}" "win64_${MO2_QT_ARCH}"
+              -m ${MO2_QT_MODULES}
+              -O "${_mo2_qt_tmp}"
+      RESULT_VARIABLE _mo2_rc)
+
+    set(_mo2_qt_built "${_mo2_qt_tmp}/${MO2_QT_VERSION}/${MO2_QT_ARCH}")
+    if(_mo2_rc EQUAL 0 AND EXISTS "${_mo2_qt_built}/lib/cmake/Qt6/Qt6Config.cmake")
+      file(RENAME "${_mo2_qt_tmp}" "${_mo2_qt_dest}")
+      set(MO2_QT_DIR "${_mo2_qt_dest}/${MO2_QT_VERSION}/${MO2_QT_ARCH}")
+      message(STATUS "[MO2] Qt installed to ${MO2_QT_DIR}")
+    else()
+      # Leave nothing behind that a later configure could mistake for a good Qt.
+      file(REMOVE_RECURSE "${_mo2_qt_tmp}")
+      message(WARNING "[MO2] the Qt download did not complete; qt.tmp was removed.")
+    endif()
+  endif()
+endif()
+
 if(NOT MO2_QT_DIR)
   message(FATAL_ERROR
     "Qt ${MO2_QT_VERSION} (${MO2_QT_ARCH}) was not found.\n"
@@ -111,26 +244,16 @@ if(NOT MO2_QT_DIR)
     "Install it with aqt, which must come from git -- the PyPI release lags Qt's\n"
     "repository layout and fails on current versions:\n"
     "\n"
-    "  py -3.14 -m pip install git+https://github.com/miurahr/aqtinstall\n"
-    "  py -3.14 -m aqt install-qt windows desktop ${MO2_QT_VERSION} win64_${MO2_QT_ARCH} \\\n"
-    "      -m qtwebengine qtwebchannel qtpositioning qtserialport qtimageformats \\\n"
-    "         qtwebsockets qtnetworkauth qttasktree \\\n"
-    "      -O \"${CMAKE_CURRENT_LIST_DIR}/qt\"\n"
+    ${_mo2_qt_manual_instructions}
     "\n"
-    "The module list is not optional, and it fails in two different directions.\n"
-    "\n"
-    "qtwebsockets and qtnetworkauth are BUILD requirements -- modorganizer's\n"
-    "src/CMakeLists.txt names both -- and omitting either stops configure with\n"
-    "'Failed to find required Qt component', 30 minutes in, after vcpkg has built\n"
-    "every dependency.\n"
-    "\n"
-    "qtimageformats is a RUNTIME requirement and fails silently instead. Upstream\n"
-    "CI compiles MO2 without launching it, so its list omits runtime-only modules;\n"
-    "without this one MO2 builds 4 image plugins instead of 9 and cannot render\n"
-    "TGA, TIFF or WebP mod previews, with nothing failing at build time.\n"
+    "The module list above is not optional; the comment beside MO2_QT_MODULES in\n"
+    "CMakeLists.txt explains how each half of it fails.\n"
     "\n"
     "Already have Qt elsewhere? Point at it instead:\n"
-    "  cmake --preset vs2026 -DMO2_QT_DIR=<prefix>   (or set QTDIR)")
+    "  cmake --preset vs2026 -DMO2_QT_DIR=<prefix>   (or set QTDIR)\n"
+    "\n"
+    "This project can also fetch Qt itself; that is MO2_AUTO_INSTALL_QT, which is\n"
+    "currently OFF.")
 endif()
 
 message(STATUS "[MO2] Qt: ${MO2_QT_DIR}")
@@ -477,3 +600,52 @@ mo2_add_repo(installer_omod)
 set(CMAKE_VS_INCLUDE_INSTALL_TO_DEFAULT_BUILD ON)
 set_property(DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
              PROPERTY VS_STARTUP_PROJECT organizer)
+
+# --- ...and the same thing again, for the way the README actually tells you to open it -----
+#
+# CMAKE_VS_INCLUDE_INSTALL_TO_DEFAULT_BUILD above is necessary and not sufficient. It
+# adds the INSTALL *project* to the generated solution's default build, so it covers
+# opening build/mo2.slnx and pressing Build Solution.
+#
+# It does nothing for the flow this project actually documents. "Open the folder, pick
+# the vs2026 preset, build" is Visual Studio's CMake mode, and both it and Rider build
+# by running
+#
+#     cmake --build build --config RelWithDebInfo
+#
+# which builds the default target -- ALL_BUILD -- and never looks at the solution's
+# project list. Measured 2026-08-15 on a clean clone: that command exits 0, reports 0
+# errors and 0 warnings, links 46 projects, and leaves install/ NON-EXISTENT. The
+# ModOrganizer.exe it produces sits in build/modorganizer/src/RelWithDebInfo/ with no
+# plugins, no Qt runtime, no usvfs and no stylesheets beside it, so it cannot start.
+# A green build with nothing runnable at the end of it is precisely the failure mode
+# docs/TRAPS.md exists to catalogue.
+#
+# So put the install in ALL_BUILD too. It has to run after everything else, which means
+# depending on every target in the tree -- collected rather than listed, because a
+# hand-written list silently stops covering repositories as they are added.
+function(mo2_collect_targets outvar dir)
+  get_property(_targets DIRECTORY "${dir}" PROPERTY BUILDSYSTEM_TARGETS)
+  get_property(_subdirs DIRECTORY "${dir}" PROPERTY SUBDIRECTORIES)
+  foreach(_subdir IN LISTS _subdirs)
+    mo2_collect_targets(_sub_targets "${_subdir}")
+    list(APPEND _targets ${_sub_targets})
+  endforeach()
+  set(${outvar} "${_targets}" PARENT_SCOPE)
+endfunction()
+
+# Collect BEFORE creating the target below, so it cannot depend on itself.
+mo2_collect_targets(_mo2_all_targets "${CMAKE_CURRENT_SOURCE_DIR}")
+
+# $<CONFIG> and not a fixed configuration: this is a multi-config generator, and
+# installing RelWithDebInfo artifacts from a Debug build would produce a mixed tree.
+add_custom_target(mo2-install ALL
+  COMMAND "${CMAKE_COMMAND}" --install "${CMAKE_BINARY_DIR}" --config $<CONFIG>
+  COMMENT "[MO2] installing into ${CMAKE_INSTALL_PREFIX}"
+  VERBATIM)
+add_dependencies(mo2-install ${_mo2_all_targets})
+
+# Cost of doing this on every build, measured warm on a fully built tree: ALL_BUILD
+# alone 5.3 s, ALL_BUILD plus this install 12.8 s. The install is idempotent -- every
+# rename in mo2_deploy_qt is guarded by an EXISTS test -- so re-running it costs the
+# ~7 s and changes nothing else.

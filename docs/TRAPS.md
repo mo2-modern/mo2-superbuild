@@ -301,6 +301,38 @@ but `importlib.metadata` could resolve either. Clear with `mob build -c <python 
 
 ## Superbuild and clone
 
+🔴 **`cmake --build build` exits 0, links every project, and used to leave `install/` non-existent.**
+`CMAKE_VS_INCLUDE_INSTALL_TO_DEFAULT_BUILD` adds the INSTALL **project** to the generated
+*solution's* default build, so it only covers opening `build/mo2.slnx` and pressing Build Solution.
+It does nothing for the flow the README documents — "open the folder, pick the preset, build" is
+Visual Studio's **CMake mode**, and it, Rider and the command line all build by running
+`cmake --build`, which builds `ALL_BUILD` and never reads the solution's project list.
+
+Measured 2026-08-15 on a clean clone: exit 0, 0 errors, 0 warnings, 471 TUs, 46 projects linked,
+and **no `install/` directory at all**. The only `ModOrganizer.exe` was in
+`build/modorganizer/src/RelWithDebInfo/`, where it has no plugins, no Qt runtime, no usvfs and no
+stylesheets beside it and therefore cannot start.
+
+**Fixed** by the `mo2-install` target in the top-level `CMakeLists.txt`, which is in `ALL`, depends
+on every target collected from the directory tree, and runs `cmake --install`. Cost measured warm:
+`ALL_BUILD` alone 5.3 s, with the install 12.8 s.
+
+⚠️ **The shape of the mistake is what to remember:** the setting was verified to *exist* and to be
+the documented mechanism, and never verified to *fire* in the flow the README tells people to use.
+That is the same error as #2 below, two years apart. **Assert on `install/bin/ModOrganizer.exe`,
+never on the build's exit code.**
+
+🪤 **A first build leaves 25 of the 34 submodules dirty, and that is expected.**
+`mo2_add_translations` runs `lupdate`, which rewrites each repository's `*_en.ts` **in place** —
+41 files, all of it `<location line="…">` churn from source lines having moved. Git also warns
+`LF will be replaced by CRLF` on every one, because `lupdate` writes LF against a `.gitattributes`
+that mandates CRLF.
+
+It is noise rather than damage, but it means **`git status` in a submodule is not a clean signal
+after a build**, and a careless `git commit -a` in one of them commits line-number churn with the
+wrong line endings — the exact hazard [Editing source](#editing-source) is about, arriving from the
+build system instead of from an editor. Clear it with `git -C repos/<name> checkout -- .`.
+
 🔴 **Building from the existing checkout does NOT test the superbuild. Clone it.** Three defects
 survived every prior check and all three appeared the first time `git clone --recursive` was run
 into an empty directory:
@@ -322,6 +354,22 @@ into an empty directory:
 *used*. Evidence that verifies a proposition adjacent to the one that matters is not verification.
 
 ## IDEs
+
+🪤 **`VS_DEBUGGER_COMMAND` only aims the Run button in ONE of the two ways this repository gets
+opened.** `mo2_set_project_to_run_from_install` writes it into `organizer.vcxproj`, and it is
+correct there — verified in the generated file, for all four configurations, pointing at
+`install\bin\ModOrganizer.exe`. That covers opening `build\mo2.slnx`.
+
+It does **not** cover opening the **folder**, which is what the README tells people to do. In
+CMake/Open-Folder mode Visual Studio never reads the generated `.vcxproj`: it builds its
+startup-item list from the CMake **file API**, whose artifact path for the `organizer` target is
+`build\modorganizer\src\RelWithDebInfo\ModOrganizer.exe` — the copy with no plugins, no Qt runtime
+and no usvfs beside it, which cannot start. `.vs\launch.vs.json` is committed to override that.
+
+**This is the same shape as the install trap above**, and it is worth naming: a mechanism was
+verified to be *set correctly* without checking that the flow the documentation recommends is the
+one that *reads* it. Two different settings, same blind spot, both found in one day. **When
+something is configured per-IDE-mode, name which mode you verified.**
 
 🔴 **The superbuild emits 144 `CMake Error` lines in an IDE and none from the command line — and
 exits 0 either way.** Opening `mo2-ide` in Rider (or CLion, VS Code, Visual Studio) produces a wall
@@ -445,9 +493,24 @@ before CMake ever sees it — `-DMO2_QT_VERSION=6.99.0` arrives as **`6`**, whil
 value nobody typed. Verified with a two-line probe project after an error message printed "Qt 6"
 for a version that was passed as 6.99.0.
 
-**Two Pythons — always invoke tooling as `py -3.14 -m <tool>`.** Bare `python` resolves to
-**3.13**. **This split is correct, do not unify it:** 3.13 is the *build's* Python (CMake finds it
-through the registry, not PATH), 3.14 is *tooling's* — `aqt` and `pre-commit` live there.
+**The build and tooling both use Python 3.14, but they FIND it differently.** `cmake_common/
+mo2_versions.cmake` pins `MO2_PYTHON_VERSION` to 3.14 and `plugin_python` asks for it `EXACT`, so a
+machine whose only Python is 3.14 builds the tree fine — verified 2026-08-15 on a box with exactly
+one registered interpreter (`HKCU\SOFTWARE\Python\PythonCore` listing `3.14` and nothing else).
+
+**The mechanisms still differ, and that is what to remember:** CMake resolves the *build's* Python
+through the **registry**, not PATH, while `aqt` and `pre-commit` are reached through the **launcher**
+as `py -3.14 -m <tool>`. So a Python that is on PATH but unregistered is invisible to the build, and
+one that is registered but not known to `py` is invisible to tooling.
+
+⚠️ **The build's Python needs the development headers**, because `plugin_python` requests the
+`Development` component — `include/Python.h` and `libs/python314.lib`. An embeddable or
+headers-less install configures right up to `plugin_python` and then fails.
+
+🕰 **Earlier revisions of this file and of [BUILD.md](BUILD.md) said 3.13 was the build's Python and
+that the 3.13/3.14 split must not be unified.** That was true before `cmake_common` commit
+`686fdeb versions: target Python 3.14` and is now wrong; [ADR-007](DECISIONS.md#adr-007) carries the
+correction in its last paragraph while its opening lines still read the old way.
 
 **Having both VS2022 and VS2026 installed breaks mob's auto-detection.** `vswhere -version 17` is
 a *minimum*, so it matches both and mob bails with "vswhere returned multiple installations". Pin

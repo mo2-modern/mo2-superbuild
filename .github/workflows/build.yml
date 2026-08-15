@@ -88,42 +88,27 @@ jobs:
       # needs WebEngine, which vcpkg would have to build Chromium for. The
       # superbuild looks for it at ./qt/<version>/<arch>, which is exactly the
       # layout `aqt -O qt` produces.
+      # There is deliberately NO "Install Qt" step. Configure installs Qt itself
+      # when it cannot find it (MO2_AUTO_INSTALL_QT, on by default), into exactly
+      # this directory, so all this cache has to do is make the download optional.
+      #
+      # That is worth more than the few minutes it saves: CI now exercises the
+      # same acquisition path a contributor gets, rather than a hand-maintained
+      # copy of it. This step used to carry its own duplicate of the Qt module
+      # list -- the fourth copy in the tree -- and duplication of exactly this
+      # list is what cost four months when two modules went missing from the
+      # copies (see docs/TRAPS.md). The single copy now lives in MO2_QT_MODULES
+      # in CMakeLists.txt, and both the download and the printed instructions
+      # derive from it.
+      #
+      # A cache saved with a shorter module list would restore happily and then
+      # fail configure on a missing component, so the key still needs bumping
+      # when MO2_QT_MODULES changes.
       - name: Cache Qt
-        id: cache-qt
         uses: actions/cache@v6
         with:
           path: qt
-          # Bump the suffix whenever the module list below changes. The restore
-          # is keyed on version and arch only, so a cache saved with a shorter
-          # module list would be restored happily and fail configure half an
-          # hour later on a missing component.
           key: qt-${{ env.MO2_QT_VERSION }}-${{ env.MO2_QT_ARCH }}-mods2-v2
-
-      - name: Install Qt
-        if: steps.cache-qt.outputs.cache-hit != 'true'
-        shell: pwsh
-        run: |
-          # aqt must come from git -- the PyPI release lags Qt's repo layout.
-          python -m pip install git+https://github.com/miurahr/aqtinstall
-          # The module list is not optional and fails in two directions.
-          #
-          # qtwebsockets and qtnetworkauth are BUILD requirements, both named by
-          # modorganizer/src/CMakeLists.txt. Run 31518812267 omitted them and
-          # died on "Failed to find required Qt component WebSockets" after 30
-          # minutes -- configure resolves Qt only once vcpkg has built all 112
-          # packages, so a missing component costs a full run to discover.
-          #
-          # qtimageformats is a RUNTIME requirement and fails silently instead:
-          # upstream CI compiles MO2 without launching it, so its list omits
-          # runtime-only modules, and without this one MO2 builds 4 image
-          # plugins instead of 9 and cannot render TGA, TIFF or WebP previews.
-          #
-          # This list matches the Qt install that demonstrably builds and runs
-          # this tree; keep it in step with the one CMakeLists.txt prints.
-          python -m aqt install-qt windows desktop $env:MO2_QT_VERSION win64_$env:MO2_QT_ARCH `
-            -m qtwebengine qtwebchannel qtpositioning qtserialport qtimageformats `
-               qtwebsockets qtnetworkauth qttasktree `
-            -O qt
 
       - name: Configure
         shell: pwsh
