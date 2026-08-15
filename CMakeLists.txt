@@ -49,51 +49,39 @@ project(mo2 LANGUAGES CXX)
 
 # --- where the repositories live ----------------------------------------------
 # The 34 repositories are submodules under repos/, so `git clone --recursive`
-# gives a complete checkout. If they have not been initialised, fall back to a
-# sibling mo2-modern tree, which is what a machine that used mob already has --
-# there is no reason to make someone clone several GB twice.
+# gives a complete checkout. That is the only default.
+#
+# There used to be a fallback to a sibling ../mo2-modern/build/build, so a machine
+# that had used mob did not have to clone several GB twice. mob is retired
+# (ADR-027) and that tree no longer exists anywhere, so the fallback pointed at a
+# layout nothing produces -- while re-arming the trap in docs/TRAPS.md where a
+# sibling checkout silently won and the submodules were verified present but never
+# used. Overriding the location is still supported; it is now explicit.
 #
 # Point this anywhere; nothing else in this file assumes a location. This project
 # writes nothing into it -- but note that the BUILD does: mo2_add_translations
 # runs lupdate, which rewrites each repository's *_en.ts in place. See
 # docs/TRAPS.md.
-if(EXISTS "${CMAKE_CURRENT_LIST_DIR}/repos/uibase/CMakeLists.txt")
-  set(_mo2_default_root "${CMAKE_CURRENT_LIST_DIR}/repos")
-else()
-  set(_mo2_default_root "${CMAKE_CURRENT_LIST_DIR}/../mo2-modern/build/build")
-endif()
-
-set(MO2_SOURCE_ROOT "${_mo2_default_root}"
+set(MO2_SOURCE_ROOT "${CMAKE_CURRENT_LIST_DIR}/repos"
     CACHE PATH "Directory containing the MO2 repositories (uibase, usvfs, ...)")
 
 get_filename_component(MO2_SOURCE_ROOT "${MO2_SOURCE_ROOT}" ABSOLUTE)
 
-# Say so, loudly, when the fallback is what resolved. TRAPS.md records this exact
-# shape as clone-defect #2: the submodules were confirmed to EXIST and never
-# confirmed to be USED, because a sibling tree quietly won. The fallback is still
-# worth having -- cloning several GB twice is a real cost -- but it must not be the
-# quiet outcome, and a STATUS line is quiet.
-if(NOT MO2_SOURCE_ROOT STREQUAL "${CMAKE_CURRENT_LIST_DIR}/repos"
-   AND EXISTS "${MO2_SOURCE_ROOT}/uibase/CMakeLists.txt")
-  if(NOT EXISTS "${CMAKE_CURRENT_LIST_DIR}/repos/uibase/CMakeLists.txt")
-    message(WARNING
-      "[MO2] Building from a checkout OUTSIDE this repository:\n"
-      "  ${MO2_SOURCE_ROOT}\n"
-      "repos/ has no uibase, so this fell back to a sibling tree. The submodules of "
-      "THIS clone are not being built -- `git submodule update --init` if that is "
-      "not what you meant.")
-  endif()
+# An override is a deliberate act, but it should never be a silent one: building
+# something other than this clone's own submodules is exactly the confusion
+# docs/TRAPS.md records as clone-defect #2.
+if(NOT MO2_SOURCE_ROOT STREQUAL "${CMAKE_CURRENT_LIST_DIR}/repos")
+  message(STATUS
+    "[MO2] MO2_SOURCE_ROOT is overridden -- building sources from outside this "
+    "repository, and NOT the submodules under repos/")
 endif()
 
 if(NOT EXISTS "${MO2_SOURCE_ROOT}/uibase/CMakeLists.txt")
   # Distinguish "your submodules are missing" from "you pointed this somewhere
   # wrong". They are the same symptom and completely different fixes, and the
   # first is far more common: someone who cloned without --recursive, or who
-  # followed the toolchain error above and fetched only the vcpkg submodule,
-  # lands here with MO2_SOURCE_ROOT reporting a sibling directory they have
-  # never heard of and no mention of submodules at all.
-  if(MO2_SOURCE_ROOT STREQUAL "${CMAKE_CURRENT_LIST_DIR}/repos"
-     OR NOT EXISTS "${CMAKE_CURRENT_LIST_DIR}/repos/uibase/CMakeLists.txt")
+  # followed the toolchain error above and fetched only the vcpkg submodule.
+  if(MO2_SOURCE_ROOT STREQUAL "${CMAKE_CURRENT_LIST_DIR}/repos")
     message(FATAL_ERROR
       "The MO2 repositories are missing from repos/.\n"
       "\n"
@@ -103,8 +91,7 @@ if(NOT EXISTS "${MO2_SOURCE_ROOT}/uibase/CMakeLists.txt")
       "That is several GB. `git clone --recursive` would have done it at clone "
       "time.\n"
       "\n"
-      "Already have an MO2 checkout elsewhere -- from mob, for instance? Use it "
-      "instead of cloning twice:\n"
+      "Already have an MO2 checkout elsewhere? Use it instead of cloning twice:\n"
       "  cmake --preset vs2026 -DMO2_SOURCE_ROOT=<path to the directory holding uibase>")
   endif()
 
@@ -216,9 +203,10 @@ if(MO2_QT_DIR AND NOT EXISTS "${MO2_QT_DIR}/lib/cmake/Qt6/Qt6Config.cmake")
 endif()
 
 if(NOT MO2_QT_DIR)
+  # qt/ is where this project installs Qt; QTDIR covers one installed elsewhere.
+  # A third candidate, ../mo2-modern/tools/Qt, was dropped with mob (ADR-027).
   foreach(_qt_candidate
       "${CMAKE_CURRENT_LIST_DIR}/qt/${MO2_QT_VERSION}/${MO2_QT_ARCH}"
-      "${CMAKE_CURRENT_LIST_DIR}/../mo2-modern/tools/Qt/${MO2_QT_VERSION}/${MO2_QT_ARCH}"
       "$ENV{QTDIR}")
     if(_qt_candidate AND EXISTS "${_qt_candidate}/lib/cmake/Qt6/Qt6Config.cmake")
       set(MO2_QT_DIR "${_qt_candidate}")
@@ -593,11 +581,14 @@ install(DIRECTORY "${MO2_USVFS_PREFIX}/" DESTINATION "." USE_SOURCE_PERMISSIONS
 # not git repositories at all, and copies license texts out of its own checkout.
 # A build system that only builds produces an MO2 that starts and looks broken.
 
-# Both of these are DOWNLOADED by mob, not built and not cloned, so a checkout
-# that has never seen mob does not have them. Prefer an existing directory when
-# one is there -- re-downloading what mob already fetched is pure waste -- and
-# otherwise fetch into the build tree. Versions and URLs match mob's tables in
-# src/tasks/stylesheets.cpp, src/tasks/explorerpp.cpp and mob.ini.
+# Both of these are DOWNLOADED rather than built or cloned, so no checkout has
+# them. Prefer an existing directory when one is there -- re-downloading what is
+# already on disk is pure waste -- and otherwise fetch into the build tree.
+#
+# Provenance, which is still the reason these versions are what they are: they
+# match mob's release tables in src/tasks/stylesheets.cpp, src/tasks/explorerpp.cpp
+# and mob.ini. Check those when bumping, since upstream MO2 still ships whatever
+# mob names.
 
 set(MO2_PREBUILT_DIR "${CMAKE_BINARY_DIR}/prebuilt"
     CACHE PATH "Where downloaded, non-buildable components are unpacked")

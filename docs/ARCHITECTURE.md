@@ -6,14 +6,16 @@ the toolchain is, and how dependencies resolve.
 For *how to build it*, see [BUILD.md](BUILD.md). For *why* any of it is shaped this way, see
 [DECISIONS.md](DECISIONS.md).
 
-## Two trees
+## One tree
 
-**This repository** is the superbuild. It holds no sources of its own: the repositories arrive as
-submodules under `repos/`, vcpkg under `vcpkg/`.
+**This repository is the whole thing.** It holds no sources of its own: the repositories arrive as
+submodules under `repos/`, vcpkg under `vcpkg/`, and everything it produces lands in `build/` and
+`install/`.
 
-**The mob working tree** is separate and is not published. It holds mob, its own checkout of the
-repositories under `build/build/`, Qt, and the `tidy/` side trees clangd uses. Sections below that
-mention `build/build/`, `mob.ini` or `env.ps1` describe that tree, not this repository.
+There used to be a second, unpublished tree built around `mob`. It is retired
+([ADR-027](DECISIONS.md#adr-027)) and gone. Older notes referring to `build/build/`, `mob.ini`,
+`env.ps1` or the `tidy/` trees describe that tree; what it was is frozen in
+[`history/MOB.md`](history/MOB.md).
 
 > **"34" means three different things in older notes; here it means one.** `repos/` holds **34
 > submodules**. **33** of them are buildable — `cmake_common` is CMake modules, consumed rather than
@@ -29,7 +31,7 @@ mention `build/build/`, `mob.ini` or `env.ps1` describe that tree, not this repo
 |---|---|---|
 | Visual Studio | **2026** (18.x, Community) | generator `Visual Studio 18 2026`; VS2022 kept as fallback |
 | MSVC toolset | **v145** (14.51) | ABI-compatible with all of 14.x — [ADR-005](DECISIONS.md#adr-005) |
-| CMake | **4.4.2** standalone *for mob* | [ADR-004](DECISIONS.md#adr-004). **The superbuild does not need it** — it requires 3.25 and is built with the CMake Visual Studio ships (4.3.1). Only the mob path wants 4.4.2 first on `PATH` |
+| CMake | whatever VS ships (**4.3.1**) | The superbuild requires 3.25 and needs no standalone install. [ADR-004](DECISIONS.md#adr-004) put mob on 4.4.2 first on `PATH`; with mob retired that only matters for reading older notes |
 | Qt | **6.11.1** `msvc2022_64` | via `aqtinstall` from git; 3.3 GB; `qt_vs` stays `2022` |
 | Python (build) | **3.14** | found by CMake through the registry, not PATH |
 | Python (tooling) | **3.14** | `aqt`, `pre-commit` — always `py -3.14 -m <tool>` |
@@ -69,19 +71,11 @@ upstream/master ──ff──> origin/master ──merge──> origin/modern
 - **`master`** — pure mirror of upstream. **Never commit here.** Fast-forward only.
 - **`modern`** — default branch, all our work.
 
-`mob` implements this natively through four `mob.ini` keys:
-
-```ini
-[task]
-mo_org            = mo2-modern   ; clone from the fork
-mo_branch         = modern       ; check out our branch
-mo_fallback       = master       ; repos without `modern` fall back silently
-set_origin_remote = true         ; origin=mo2-modern, upstream=ModOrganizer2
-remote_org        = mo2-modern
-```
-
-`mo_fallback` is what made a staged rollout possible — `modern` branches could be created one repo
-at a time while everything else kept building from `master`.
+The superbuild pins each repository by submodule gitlink, so the branch a commit came from is not
+something the build knows or cares about — it builds exact commits. That is stricter than mob's
+arrangement, which resolved a branch name per repository and could fall back
+([`history/MOB.md`](history/MOB.md)); the tradeoff is that a `modern` branch moving forward does
+nothing here until the gitlink is bumped.
 
 ### Current diff surface against upstream
 
@@ -91,12 +85,19 @@ that way is the whole point of [ADR-001](DECISIONS.md#adr-001).
 
 ### Upstream sync
 
-`sync-upstream.ps1` pulls upstream into every repo's `master` and merges into `modern`. It is
-idempotent and self-heals a missing remote.
+🔴 **There is no sync tooling in this repository, and the submodules have no `upstream` remote.**
+Each `repos/*` checkout has only `origin`, pointing at the `mo2-modern` fork, so nothing here can
+even fetch `ModOrganizer2/*` to compare against. A `sync-upstream.ps1` existed in the mob tree and
+survives among its leftovers; bringing it in — or rewriting it — is the first task of any upstream
+sweep, because the survey cannot be run without it.
 
-⚠️ **Do not use `mob git add-remote`** — it builds **SSH** URLs (`tools/git.cpp:33`), which will not
-authenticate against an HTTPS + gh-credential-helper setup. All `upstream` remotes are
-`set-url --push upstream DISABLED`, i.e. fetch-only.
+When it is restored, the flow is [ADR-001](DECISIONS.md#adr-001)'s:
+`upstream/master → origin/master → merge into origin/modern`, never rebase. Keep `upstream` remotes
+fetch-only (`set-url --push upstream DISABLED`), and build their URLs over HTTPS — mob's
+`git add-remote` produced SSH URLs, which do not authenticate against a gh-credential-helper setup.
+
+⚠️ **The merge-conflict path has never been exercised.** The one sync run that happened was clean
+because upstream had not moved.
 
 ⚠️ **Conflict handling is still untested.** The first sync run was clean because upstream had not
 moved. The loop is proven; the merge-conflict path is not.
@@ -117,33 +118,30 @@ purely mechanical:
 
 ---
 
-## Directory layout of the mob working tree
-
-Not this repository. See [Two trees](#two-trees).
+## Directory layout
 
 | Path | What |
 |---|---|
-| `mob/` | the build orchestrator (our fork, branch `modern`) |
-| `build/build/` | 33 MO2 repos as git submodules, plus `usvfs`, which mob clones through its own task and is **not** a submodule. Source edits happen here |
-| `build/install/` | build output; `bin/ModOrganizer.exe` is the thing to run |
-| `vcpkg/` | pinned vcpkg clone |
-| `vcpkg-registry/` | our port registry (branch `main` — [ADR-008](DECISIONS.md#adr-008)) |
-| `tools/Qt/` | Qt 6.11.1, 3.3 GB, via `aqtinstall` |
-| `tidy/` | tooling-only Ninja trees — **never** build artifacts; see TOOLING.md in the mob working tree |
-| `docs/ROADMAP.md` | current state; the rest of the documentation is in this repository |
-| `env.ps1` | session environment — **source before any build** |
-| `mob.ini` | machine-local paths; never committed |
-| `sync-upstream.ps1` | pulls upstream into every repo |
-| `regen-tidy.ps1` | rebuilds the clangd compile databases |
-| `*.log` (root) | only the 7 logs the docs cite; `final.log` is the definitive full-tree run |
-| `logs-archive/` | superseded build logs, kept for history — nothing references them |
+| `CMakeLists.txt` | the superbuild — the only build logic in the project |
+| `CMakePresets.json` | the `vs2026` preset; `RelWithDebInfo` only ([ADR-025](DECISIONS.md#adr-025)) |
+| `vcpkg.json` | one dependency manifest for the whole project |
+| `cmake/superbuild-redirects/` | satisfies `find_package(mo2-*)` without installing |
+| `cmake/aqt-requirements.txt` | hash-locked dependency closure for the Qt installer |
+| `repos/` | the 34 upstream repositories, as submodules. Source edits happen here |
+| `vcpkg/` | pinned vcpkg clone, as a submodule |
+| `licenses/` | third-party texts shipped in `bin/licenses` |
+| `qt/` | Qt, downloaded by configure; gitignored |
+| `build/`, `install/` | everything generated; both gitignored |
+| `.vs/launch.vs.json` | points Run at the install tree |
 
 A pre-fork tree, if you kept one, is the **known-good reference** for output diffs. Treat it as
-**read-only**. This document deliberately does not name a location for it, or for the mob tree —
-both are wherever you put them.
+**read-only**. This document deliberately does not name a location for it — it is wherever you put
+it.
 
-⚠️ **`tidy/`, `regen-tidy.ps1` and `%LocalAppData%\clangd\config.yaml` are not in any repo.** A
-fresh clone lacks all of them — the same trap as `.git/hooks`.
+⚠️ **Nothing provides the clangd tooling any more.** The `tidy/` Ninja trees, `regen-tidy.ps1` and
+`%LocalAppData%\clangd\config.yaml` lived in the mob tree and are not in any repository. Re-creating
+them against the superbuild is unstarted work; until then, clang-tidy and clangd have no compile
+database to read.
 
 ### Repo inventory by kind
 
@@ -159,13 +157,16 @@ fresh clone lacks all of them — the same trap as `.git/hooks`.
 ## Components with unusual shapes
 
 **`usvfs` is the risk centre.** It is a DLL-injection and hooking library (`asmjit` + `libudis86`)
-that is **dual-architecture — x86 *and* x64**. One configure produces one architecture, so it uses
-`vsbuild32`/`vsbuild64` rather than the `vsbuild` every other repo uses. That non-standard layout is
-the direct cause of mob's rebuild blind spot ([TRAPS.md](TRAPS.md#mobs-own-bugs)).
+that is **dual-architecture — x86 *and* x64**. One configure produces one architecture, so it needs
+two, and that non-standard shape was the direct cause of mob's rebuild blind spot, where
+`mob build -b usvfs` reported success in 20 seconds having compiled nothing
+([`history/MOB.md`](history/MOB.md)).
 
 The superbuild builds and installs both architectures at *configure* time. `ExternalProject_Add`
 does not work here: it builds at build time, and `find_package(usvfs)` has to resolve during
-configure.
+configure. Staleness is guarded by a stamp recording the toolchain **and** the usvfs source
+revision, so the equivalent blind spot cannot reopen — the earlier version of that stamp omitted the
+revision, and did reopen it.
 
 It is also the reason **a green build is never sufficient verification** — see
 [BUILD.md](BUILD.md#verification).

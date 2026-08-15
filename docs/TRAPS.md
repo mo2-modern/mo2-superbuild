@@ -15,7 +15,7 @@ tool reports success while doing nothing.
 |---|---|
 | Trust a build log's warning count | [Reading build output](#reading-build-output) |
 | State what warning level a target uses | [Build configuration](#build-configuration) |
-| Rebuild or clean `usvfs` | [mob's own bugs](#mobs-own-bugs) |
+| Rebuild or clean `usvfs` | [Superbuild and clone](#superbuild-and-clone) |
 | Run a survey with `grep` | [Surveys and worklists](#surveys-and-worklists) |
 | Edit C++ source in bulk | [Editing source](#editing-source) |
 | Touch anything vcpkg | [vcpkg](#vcpkg) |
@@ -29,29 +29,28 @@ tool reports success while doing nothing.
 
 ## Reading build output
 
-🔴 **`mob build` at the default log level prints no compiler output at all.** Its log therefore
-greps as "0 warnings" no matter what the compiler said. **Always use `-l 5`**, and sanity-check the
-`stdout` line count before trusting a zero — a full tree run produces roughly **8000 lines** of real
-compiler output (`final.log` has 8527, including 128 usvfs TUs).
-
 **An incremental build under-reports warnings.** Only recompiled translation units emit
-diagnostics, so any count taken after a partial rebuild is a *lower bound*. Use `-c` before trusting
-a total.
+diagnostics, so any count taken after a partial rebuild is a *lower bound*. Build from clean before
+trusting a total.
 
-**`message(STATUS)` is invisible in mob's logs.** mob passes `--log-level=ERROR` to every cmake
-invocation, so `[MO2] Qt version`, `[MO2] Python version`, `[MO2] SIP version` never appear in
-configure output. They surface only when `ZERO_CHECK` triggers a regenerate during `cmake --build`.
-**Never infer "it didn't reconfigure" from their absence** — verify the artifact instead.
+**Sanity-check the denominator before trusting a zero** — a full tree run produces roughly **8000
+lines** of real compiler output. A "0 warnings" result from a 200-line log is measuring nothing.
+
+> Historical note: mob's default log level printed no compiler output at all, so its logs grepped as
+> "0 warnings" regardless of what the compiler said, and `message(STATUS)` was invisible because mob
+> passed `--log-level=ERROR` to every cmake invocation. Both are gone with mob, but they are why
+> older warning counts in this project's notes cannot be taken at face value — see
+> [`history/MOB.md`](history/MOB.md).
 
 **A zero from a silently-failed script looks exactly like a zero from a clean tree.** A
 `python -c "…"` whose backslashes got eaten died with `SyntaxError`, a `2>/dev/null` hid it, and the
 sweep cheerfully reported "no source found" for all 24 repos and `TOTAL: 0`. **Assert on the
 denominator** — files actually checked, TUs actually compiled — before believing any numerator.
 
-**`mob build -c` takes the installed tree out of service for ~10 minutes.** The reconfigure clean
-wipes `build\install\bin`, and `platforms\qwindows.dll` is only rewritten by `mo2_deploy_qt` at the
-*end* of the last task. Launching MO2 mid-build aborts with *"no Qt platform plugin could be
-initialized"* — that is the clean, not a regression. Same for `styles\` and `tutorials\`.
+**Launching MO2 while an install is in progress aborts with *"no Qt platform plugin could be
+initialized"*.** `platforms\qwindows.dll` is written by `mo2_deploy_qt` near the end, so a
+half-populated `install\bin` looks like a broken build and is not one. Same for `styles\` and
+`tutorials\`.
 
 ---
 
@@ -115,10 +114,11 @@ defines it). `SPDLOG_API` is empty under a static triplet and `SPDLOG_INLINE` ch
 layout. **Always link the imported target rather than hand-rolling an include path** — that is what
 keeps the definitions byte-identical.
 
-**Plugin repos install nothing through vcpkg under mob.** Their `vcpkg.json` carries deps only
-under the `standalone` feature, which mob never enables — `vcpkg_installed` holds just bookkeeping,
-and uibase arrives from `build\install` via `find_package(mo2-uibase CONFIG REQUIRED)`. A dependency
-added there must go in **top-level `dependencies`** or it is silently not installed.
+**A dependency added to a plugin repo's own `vcpkg.json` is silently not installed.** Those
+manifests carry their deps under a `standalone` feature that nothing in a full-tree build enables,
+and the superbuild resolves everything from the single root manifest anyway
+([ADR-013](DECISIONS.md#adr-013)). A new dependency must go in the **root `vcpkg.json`** or it does
+not exist.
 
 🔴 **A repo whose preset omits `VCPKG_TARGET_TRIPLET` silently resolves to `x64-windows` — the
 DYNAMIC CRT** — while the other 23 repos pin `x64-windows-static-md`. Mixing those across a DLL
@@ -156,28 +156,12 @@ measurement run this way returns a beautifully small error count that means noth
 the defaults: `-DCMAKE_CXX_FLAGS="/DWIN32 /D_WINDOWS /EHsc <your define>"`. **Tell-tale:** the error
 is in a file that has nothing to do with what you were measuring.
 
-## mob's own bugs
-
-🔴 **Neither `-b` nor `-c` can force a `usvfs` rebuild.** Two independent mob bugs compose, and the
-result is that `mob build -b usvfs` **reports success in 20 seconds having compiled nothing.** The
-riskiest component in the project sat behind this measurement blind spot for the entire project —
-including in the old pre-fork tree.
-
-```powershell
-rm -r build\build\usvfs\vsbuild32, build\build\usvfs\vsbuild64   # the ONLY reliable way
-```
-
-1. `msbuild::do_clean()` degenerated into a **Build** when `targets_` was empty
-   (`mob/src/tools/msbuild.cpp:192`). **Fixed on our `modern` fork**; `-b` now works for a forced
-   rebuild.
-2. `mob build -c` still **does not clean preset-defined binary dirs.** Its clean deletes directories
-   named after mob's *own* generators (`tools/cmake.cpp:273`, e.g. `vsbuild`); 32 repos match by
-   luck, but usvfs uses `vsbuild32`/`vsbuild64` and is never cleaned. **Still open.** Fatal on a
-   generator change — `CMake Error: generator : Visual Studio 18 2026 Does not match the generator
-   used previously`.
-
-**Consequence worth absorbing:** any historical note saying "usvfs rebuilt clean" measured
-nothing. The known-good 2026-07-30 log contains exactly **one** `[usvfs]` line.
+🕰 **Any historical note saying "usvfs rebuilt clean" measured nothing.** Under mob, neither `-b` nor
+`-c` could force a usvfs rebuild — two bugs composed and `mob build -b usvfs` reported success in 20
+seconds having compiled nothing, so the riskiest component in the project sat behind a measurement
+blind spot for its entire history. The known-good 2026-07-30 log contains exactly **one** `[usvfs]`
+line. Details in [`history/MOB.md`](history/MOB.md); the superbuild's guard is described under
+[Superbuild and clone](#superbuild-and-clone).
 
 ---
 
@@ -285,14 +269,15 @@ now fixed; every other dependency arrives via an imported CONFIG target, which m
 correctly. **New `find_library` calls must never be added bare.**
 
 🔴 **vcvarsall.bat hijacks `VCPKG_ROOT`.** VS's `vcvarsall.bat` sets it to VS's own bundled vcpkg
-(`<VS>\VC\vcpkg`). mob resolves `paths.vcpkg` from the shell's `VCPKG_ROOT` at startup, so without
-`. .\env.ps1` mob silently builds against the wrong vcpkg *while appearing to work*. **Set `vcpkg`
-explicitly in `mob.ini` `[paths]`; never rely on the environment variable.** Symptom when it bites:
-configure succeeds, build dies with `'"cmake.exe"' is not recognized`.
+(`<VS>\VC\vcpkg`), so anything resolving vcpkg from the environment silently builds against the
+wrong one *while appearing to work*. This is why `CMakePresets.json` names `toolchainFile` as a
+**path** and never `$env{VCPKG_ROOT}` — do not "simplify" it back. It cost a whole debugging session
+under mob, where the symptom was a successful configure followed by a build dying with
+`'"cmake.exe"' is not recognized`.
 
-🔴 **vcpkg picks its own Visual Studio, independently of mob.** The custom triplet sets no
-`VCPKG_PLATFORM_TOOLSET`, so vcpkg auto-detects and uses the **newest installed** VS. Merely
-*installing* VS2026 switched every dependency to `vc145` while mob still built MO2 with v143.
+🔴 **vcpkg picks its own Visual Studio, independently of the build driving it.** The custom triplet
+sets no `VCPKG_PLATFORM_TOOLSET`, so vcpkg auto-detects and uses the **newest installed** VS. Merely
+*installing* VS2026 switched every dependency to `vc145` while the build was still on v143.
 
 **Precise ABI rule:** the linker must be the **same version as its inputs or newer**.
 deps `v143` → app `v145` is supported; deps `v145` → app `v143` is not.
@@ -307,7 +292,7 @@ the current design, and the reason centralizing `vcpkg-configuration` matters �
 uses `--target`, so `pip show sip` against Python 3.14 finds nothing. Check the `*.dist-info` dirs
 under `pylibs`. Because `--target` never uninstalls, **stale `dist-info` accumulates** (observed:
 `sip-6.15.3` and `sip-6.16.0` side by side) — module files are overwritten so builds are correct,
-but `importlib.metadata` could resolve either. Clear with `mob build -c <python repos>`.
+but `importlib.metadata` could resolve either. Clear it by deleting `build\pylibs`.
 
 ---
 
@@ -515,22 +500,9 @@ re-running inside a tree created by 3.31.6 leaves `CMAKE_CXX_COMPILE_FEATURES` e
 C++/CLI target fails at generate time with `No known features for CXX compiler "MSVC"`.
 **Fingerprint:** the build tree's `CMakeFiles/` contains **two** version directories.
 
-🔴 **mob resolves `mob.ini` from the current working directory — run it from anywhere else and every
-machine-local path silently reverts to auto-detection.** Invoked from `build\build`, mob never reads
-the ini, falls back to `vswhere` for VS, and cannot find Qt at all:
-`[conf] can't find qt install (bailing out)`.
-
-**That bail-out is luck, not a safety net.** Qt is the *only* setting with no auto-detect fallback.
-`paths.vs` auto-detects happily — so on a machine where Qt happens to be on `PATH`, the same mistake
-builds to completion against a **different Visual Studio and a different vcpkg**, which is exactly
-the `VCPKG_ROOT` hijack above with no error to notice. **Always invoke mob from the root of the mob
-working tree** — the directory holding `mob.ini`.
-
 Note for tool-driven sessions: the Bash and PowerShell tools **share one working directory**, so a
-`cd` in a Bash call silently relocates the next PowerShell `mob` invocation. Pin it —
-`Set-Location <mob-tree>` — in the same command that runs mob. **Diagnostic:** a good run
-prints `[conf] using vcvars at …\18\Community\…` and `appending to PATH: …\tools\Qt\…` within the
-first 10 lines; a run that calls `vswhere.exe` instead has not read the ini.
+`cd` in a Bash call silently relocates the next PowerShell invocation. Pin the directory in the same
+command that does the work.
 
 **Quote `-D` arguments to `cmake` in PowerShell.** An unquoted value containing dots is mangled
 before CMake ever sees it — `-DMO2_QT_VERSION=6.99.0` arrives as **`6`**, while
@@ -557,22 +529,22 @@ that the 3.13/3.14 split must not be unified.** That was true before `cmake_comm
 `686fdeb versions: target Python 3.14` and is now wrong; [ADR-007](DECISIONS.md#adr-007) carries the
 correction in its last paragraph while its opening lines still read the old way.
 
-**Having both VS2022 and VS2026 installed breaks mob's auto-detection.** `vswhere -version 17` is
-a *minimum*, so it matches both and mob bails with "vswhere returned multiple installations". Pin
-`paths.vs` explicitly in `mob.ini`.
+⚠️ **`vswhere -version 17` is a *minimum*, not an exact match**, so on a machine with both VS2022 and
+VS2026 it matches both. Anything selecting a toolchain that way gets an ambiguous answer or the
+wrong one — check what it resolved rather than assuming.
 
-**VS2026 emits `.slnx`, not `.sln`**, and there is no CMake variable to choose. Only `usvfs` is
-affected — it is the one task mob drives through msbuild directly. Handled on our fork.
+**VS2026 emits `.slnx`, not `.sln`**, and there is no CMake variable to choose. The superbuild
+generates `build\mo2.slnx`; anything scripted against the old extension silently finds nothing.
 
-**A fresh `vsbuild` regenerates mid-flight on the first `cmake --build`** (glob verify), so
-MSBuild evaluates stale project files. **Always build twice after deleting `vsbuild` before
+**A fresh build tree regenerates mid-flight on the first `cmake --build`** (glob verify), so
+MSBuild evaluates stale project files. **Always build twice after deleting the build tree before
 believing a failure.**
 
 **The install tree accumulates stale artifacts — `cmake --install` never deletes.** After the
 Python 3.13 → 3.14 bump the tree held **262 stale `*313*` files** beside 262 fresh ones, including a
 dead `python313.dll`. Any change that renames outputs leaves the old ones behind forever, which
-silently invalidates any diff-against-known-good. **Wipe `build\install` and re-run `mob build`
-before trusting that diff or before shipping.**
+silently invalidates any diff-against-known-good. **Wipe `install\` and re-install before trusting
+that diff or before shipping.**
 
 **Upstream's CI `qt-modules:` list is INCOMPLETE for a runnable build.** CI compiles MO2 and
 never launches it, so runtime-only modules are missing. Confirmed gaps: **`qtserialport`** and
@@ -606,8 +578,8 @@ imported *tool* executables (`Qt::uic`, `Qt::qmlcachegen`, `Python::Interpreter`
 for all four. `Debug` passes; `Release`, `MinSizeRel` and `RelWithDebInfo` each produce a wall.
 
 **Generation still completes, build files are written, and CMake exits 0.** So the build works and
-every non-IDE check is blind to it: mob, the command line, a clean clone and CI all pass. The only
-thing that sees it is the IDE, which is exactly what this project tells people to use.
+every non-IDE check is blind to it: the command line, a clean clone and CI all pass. The only thing
+that sees it is the IDE, which is exactly what this project tells people to use.
 
 **Reproduce or clear it by moving that one directory**, not by touching code. Copying only
 `.cmake/api/v1/query/` into a clean build tree takes it from 0 errors to 144.

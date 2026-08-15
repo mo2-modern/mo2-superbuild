@@ -100,7 +100,7 @@ settings.
 | `MO2_AUTO_INSTALL_QT` | `ON` | Download Qt when it cannot be found. Set `OFF` to be given the exact `aqt` command instead. |
 | `MO2_QT_DIR` | auto-detected | Use an existing Qt instead of downloading one. `QTDIR` works too. |
 | `MO2_QT_VERSION` | `6.11.1` | Qt version to build against. |
-| `MO2_SOURCE_ROOT` | `repos/` | Build a different MO2 checkout, such as one left over from `mob`. |
+| `MO2_SOURCE_ROOT` | `repos/` | Build a different MO2 checkout instead of this clone's submodules. |
 | `MO2_QT_MODULES` | see `CMakeLists.txt` | Qt modules to install. The only copy of this list; the download and the printed instructions are both generated from it. |
 
 ## How it works
@@ -149,8 +149,10 @@ repos/                       the 34 upstream repositories, as submodules
 | [TRAPS.md](docs/TRAPS.md) | Before trusting a build result. Failure modes that report success instead of failing |
 | [UPSTREAM.md](docs/UPSTREAM.md) | Bugs found here that belong to upstream MO2 |
 
-Parts of these describe `mob` and the working tree it needs, which is not published. Treat those
-sections as background.
+Everything they describe is in this repository. They used to document a second, unpublished tree
+built around `mob` as well; that is retired ([ADR-027](docs/DECISIONS.md#adr-027)) and what it was
+is frozen in [`history/MOB.md`](docs/history/MOB.md), which you only need in order to read older
+notes.
 
 ## Status
 

@@ -39,6 +39,7 @@ verify) and several decisions look wrong without it.
 | [024](#adr-024) | Configure downloads Qt; `MO2_QT_MODULES` is the only copy of the list | Accepted |
 | [025](#adr-025) | `RelWithDebInfo` is the only configuration the preset offers | Accepted |
 | [026](#adr-026) | Show the project in the MO2 Discord before submitting anything upstream | Accepted |
+| [027](#adr-027) | `mob` is retired — the superbuild is the only way to build this | Accepted |
 
 ---
 
@@ -363,7 +364,7 @@ question, would be work without payoff.
 ### Phase order is fixed — do not reorder
 **2026-08-09 · Accepted**
 
-Each phase must be green before the next starts. See ROADMAP.md (mob working tree).
+Each phase must be green before the next starts. See ROADMAP.md, which lived in the mob tree and is gone (ADR-027) — the phase list survives only in these ADRs and `history/`.
 
 **Why it keeps coming up:** the one parked Phase 2 remnant is blocked on Phase 5
 ([ADR-013](#adr-013)), and Phase 5 would also deliver the "open in an IDE and click build" goal
@@ -419,7 +420,7 @@ swapping headers.**
 - Upstream has not asked for it, so none of it is cherry-pickable back — it is divergence we own
   forever and pay for on every sync.
 
-**Decision, 2026-08-11: cut.** Struck from the Phase 3 goal in ROADMAP.md (mob working tree).
+**Decision, 2026-08-11: cut.** Struck from the Phase 3 goal in ROADMAP.md, since retired with the mob tree (ADR-027).
 
 **This includes the ~55 "mechanical" includes.** They were the tempting middle option and they are
 not worth it either: the same zero defects, still spread across 5 upstreams, and a half-migrated
@@ -487,7 +488,7 @@ through MO2, 45 `type overwrite` + 1 `type chained patch`, 0 errors.
    `23` *and* `26` to `/std:c++latest`. Post-change the tree measures **92 of 94 generated projects
    at `stdcpplatest`**, the other 2 being the C++/CLI pair above. So this ADR did not put the tree
    "on C++23 with C++26 as runway" — it put it on the **latest working draft**, and a follow-up
-   C++26 build task would change nothing. See ROADMAP.md (mob working tree).
+   C++26 build task would change nothing. See ROADMAP.md, which lived in the mob tree and is gone (ADR-027) — the phase list survives only in these ADRs and `history/`.
 
 ---
 
@@ -503,9 +504,9 @@ it — which is why it had grown a "START HERE" block instead of an organization
 
 | Lifetime | Files |
 |---|---|
-| Changes every session | ROADMAP.md (mob working tree) |
+| Changes every session | ROADMAP.md — **gone** with the mob tree (ADR-027); nothing replaced it |
 | Changes when a decision is made | `DECISIONS.md` (this file), [UPSTREAM.md](UPSTREAM.md) |
-| Changes when the system changes | [ARCHITECTURE.md](ARCHITECTURE.md), [BUILD.md](BUILD.md), TOOLING.md (mob working tree) |
+| Changes when the system changes | [ARCHITECTURE.md](ARCHITECTURE.md), [BUILD.md](BUILD.md) |
 | Append-only, never rewritten | [TRAPS.md](TRAPS.md) |
 | Frozen | [`history/`](history/) |
 
@@ -639,3 +640,46 @@ rebase price, and the bugs stay live for upstream users meanwhile.
 
 **What clears it:** the owner's say-so, after the Discord conversation. Nothing else — not a
 reviewer's judgement that the fixes look ready, and not the fact that ADR-015 now reads "gate met".
+
+---
+
+## ADR-027
+### `mob` is retired — the superbuild is the only way to build this
+**2026-08-15 · Accepted**
+
+The mob working tree is gone. It is not archived, not reproducible, and not coming back; what
+survives is a handful of loose scripts. The superbuild is the only build path, and the documentation
+now says so rather than describing two.
+
+**Why this is a decision and not just an observation:** [BUILD.md](BUILD.md) claimed *"both paths are
+kept green"*, which was a maintenance commitment. It could not have been honoured — there was no
+tree left to keep green, and nothing would have detected the drift. Retiring it explicitly is the
+honest end of that promise.
+
+**What went, and what was kept.** Instructions for operating a tree nobody can obtain are deleted:
+setup steps, `mob.ini`, `env.ps1`, the session ritual, the command list, log conventions, the
+directory layout. Two things were kept deliberately:
+
+- **mob as context.** Upstream MO2 still builds with mob, so the README explaining this project by
+  contrast with it remains correct, and the stylesheet and Explorer++ versions still derive from
+  mob's release tables. Provenance is not obsolete just because our copy is.
+- **mob's traps and bugs**, moved to [`history/MOB.md`](history/MOB.md) under
+  [ADR-022](#adr-022)'s frozen tier rather than deleted. They explain why historical numbers in this
+  project cannot be trusted — most importantly that `mob build -b usvfs` reported success having
+  compiled nothing, so every "usvfs rebuilt clean" note before the fix measured nothing. Four of
+  mob's bugs are also still open PR candidates in [UPSTREAM.md](UPSTREAM.md), against a repository
+  that still exists.
+
+**Code changed with it:** `MO2_SOURCE_ROOT` no longer falls back to a sibling
+`../mo2-modern/build/build`, and the Qt search no longer probes `../mo2-modern/tools/Qt`. Both
+pointed at a layout nothing produces any more, and the source-root fallback additionally re-armed
+[TRAPS.md](TRAPS.md#superbuild-and-clone)'s clone-defect #2, where a sibling checkout silently won
+and the submodules were verified present but never used. Overriding `MO2_SOURCE_ROOT` still works
+and is now announced on every configure.
+
+⚠️ **What this costs, stated plainly:** the tooling that lived only in that tree is gone with it.
+`sync-upstream.ps1` is the important one — [ARCHITECTURE.md](ARCHITECTURE.md#upstream-sync) records
+that no submodule has an `upstream` remote, so there is currently no way to compare against
+`ModOrganizer2/*` at all. The `tidy/` Ninja trees and `regen-tidy.ps1` are gone too, so clang-tidy
+and clangd have no compile database. Neither has been re-created here; both are real gaps, not
+oversights to discover later.
