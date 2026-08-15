@@ -252,9 +252,23 @@ it. **Opening a mod list is not enough either** — usvfs only injects when you 
 
 1. `.\env.ps1` — banner shows VS 18 and cmake 4.4.2
 2. `mob build -l 5` from clean; confirm the generator line reads `Visual Studio 18 2026` / `v145`
-3. `ctest` where targets exist (`uibase`, `plugin_python`)
+3. `ctest` where targets exist (`uibase`, `plugin_python`) — **mob path only; see below**
 4. **Launch `ModOrganizer.exe`, add a game instance, install a mod, and launch the game through it**
 5. Diff `build\install\bin` against the known-good `F:\dev\mo2\build\install\bin`
+
+🔴 **`ctest` in the superbuild runs nothing and reports success.** Verified 2026-08-15: `ctest -C
+RelWithDebInfo` in `build/` prints *"No tests were found!!!"* and **exits 0**. Do not use it as a
+verification step there, and do not read a passing `ctest` as evidence of anything.
+
+The cause is not that the tests are missing. `uibase`, `bsapacker` and `plugin_python` each carry a
+`tests/` directory gated on `BUILD_TESTING`, and the superbuild never calls `include(CTest)` or
+`enable_testing()`, so `BUILD_TESTING` is off, the subdirectories are never added, and no
+`CTestTestfile.cmake` is generated.
+
+**Turning it on is not a one-line change.** Those repositories declare `gtest` in their own
+`vcpkg.json`, but the superbuild builds from a single root manifest that does not, so enabling
+`BUILD_TESTING` without first adding `gtest` there fails at `find_package`. That is a deliberate
+decision to take, not an oversight to patch: it adds a dependency and lengthens every build.
 
 ### Proof that usvfs actually worked
 

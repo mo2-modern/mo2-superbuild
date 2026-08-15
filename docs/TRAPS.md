@@ -397,8 +397,8 @@ correctly* without checking that the flow the documentation recommends is the on
 **When something is configured per-IDE-mode, name which mode you verified.**
 
 🔴 **The superbuild emits 144 `CMake Error` lines in an IDE and none from the command line — and
-exits 0 either way.** Opening `mo2-ide` in Rider (or CLion, VS Code, Visual Studio) produces a wall
-of
+exits 0 either way.** Opening the project folder in Rider (or CLion, VS Code, Visual Studio)
+produces a wall of
 
 ```
 CMake Error in .../uibase/src/CMakeLists.txt:
@@ -410,6 +410,12 @@ CMake Error in .../uibase/src/CMakeLists.txt:
 evaluates every imported target in every configuration. A plain `cmake --preset` never looks.
 **Proven** by creating that one query file in a clean build tree — 0 errors became 144 — and the
 directory persists, so every later CLI configure in that tree errors too.
+
+⚠️ **Not reproduced on Visual Studio 2026 (18.9), 2026-08-15.** A folder-mode configure there
+finished with `CMake generation finished` and no error wall in the CMake output pane. That is one
+observation from one IDE and the Error List pane was not checked, so this entry stands until
+somebody confirms it either way — but **do not repeat the 144 figure as current** without looking
+first. If it is gone, say which version fixed it.
 
 **It is not CMP0111.** The message is CMake's unconditional generator error, not the policy-gated
 one, so `CMAKE_POLICY_DEFAULT_CMP0111=OLD` changes nothing — tried, as a normal variable and as a
