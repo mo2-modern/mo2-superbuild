@@ -83,6 +83,45 @@ Measured 2026-08-10 across all 34 repos: **248 files, +1003 / −922 lines.** Th
 the number that matters — it means the changes are in-place modernization, not accretion. Keeping it
 that way is the whole point of [ADR-001](DECISIONS.md#adr-001).
 
+Restricted to CMake files, the divergence is smaller than that suggests and almost entirely uniform:
+one line per repo adding `WERROR ON`, plus `CXX_STANDARD 20` → `23` in the six repos that do not use
+`cmake_common` ([ADR-021](DECISIONS.md#adr-021)). Only four carry substantial build changes —
+`cmake_common`, `usvfs`, `installer_omod` and `installer_fomod_csharp` — and those are fixes, not
+assembly logic.
+
+### The superbuild is not fork-specific
+
+**Verified 2026-08-15.** The superbuild was pointed at unmodified upstream sources and built them
+end to end. This matters because the obvious objection to the project is that it only builds *our*
+forks, and that turns out not to be true.
+
+Method: each fork's `master` is an untouched upstream mirror ([ADR-001](DECISIONS.md#adr-001)), so
+`git archive origin/master` per repository produced an upstream tree without cloning anything or
+touching `repos/`. Then `-DMO2_SOURCE_ROOT=<that tree>`.
+
+| Stage | Result |
+|---|---|
+| Configure | 0 errors, 597 s, both usvfs architectures built |
+| Build | 0 MSBuild errors; `ModOrganizer.exe`, `installer_omod.dll`, `installer_fomod_csharp.dll` all produced |
+| Install | 7 s |
+| CI's install-tree checks | 30 plugins, 9 image plugins, 29 stylesheet entries, 18 licence texts — identical to the fork build |
+
+**Exactly one deviation was needed**, and it is upstream's own pin rather than a superbuild
+limitation: upstream `cmake_common` sets `MO2_PYTHON_VERSION` to **3.13** and `plugin_python`
+requires it `EXACT`, so a machine with only 3.14 registered stops at the preflight. Changing that one
+line in the exported copy was enough. On a machine with 3.13 installed, no deviation is needed.
+
+⚠️ **What this does not establish.** The upstream build was never launched, so nothing about its
+runtime or usvfs hooking is verified. It emitted **930 warnings** — upstream's unfixed load, which is
+what the `/WX` campaign removed on `modern`. And "upstream" here means each fork's `master` as of the
+last sync (~2026-08-10); with no `upstream` remotes there is no fresher reference available locally.
+
+🕰 One prediction failed and is worth recording so it is not repeated: `installer_omod` was expected
+to fail without our `CMAKE_VS_GLOBALS "ResolveNuGetPackages=false"` fix, and it built cleanly.
+[UPSTREAM.md](UPSTREAM.md) attributes that failure to **CMake 4.4.2**, while the superbuild runs on
+the **4.3.1** Visual Studio ships — so the fix looks specific to the standalone-CMake path. Not
+confirmed against 4.4.2.
+
 ### Upstream sync
 
 🔴 **There is no sync tooling in this repository, and the submodules have no `upstream` remote.**
