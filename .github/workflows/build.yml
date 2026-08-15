@@ -19,27 +19,34 @@ name: Build MO2
 #                         built all 112 packages from source while reporting success
 #   31526808970  3b72f46  succeeded, 57 minutes, with the `files` cache below
 #
-# ⚠️ What is NOT proven, and matters more than the above: the last CI-tested commit
-# is 3b72f46 (2026-08-11). Everything since -- the Explorer++ re-download fix, the
-# download hashes, the build/install split -- is untested here, because there is no
-# `push` trigger and nobody has dispatched a run against HEAD. The two steps added
-# on 2026-08-15 have therefore NEVER EXECUTED: reading the Qt pin out of
-# CMakeLists.txt, and verifying the install tree. The second is the only automated
-# check in the project that can see a missing qtimageformats.
+#   31891530170  e118e84  succeeded, 41 minutes, 2026-08-15 -- the first run of the
+#                         Qt-pin and install-tree-verification steps, which had been
+#                         added four days earlier and never executed. It reported
+#                         30 plugins / 9 image plugins / 29 stylesheets / 18 licences
 #
-# So: "CI is green" is true of a commit four days behind main, and the steps written
-# to catch silent failures are exactly the ones that have never run. Dispatch a run
-# against HEAD before repeating any claim that CI verifies this tree.
+# ⚠️ There is still no `push` trigger on branches, only on `v*` tags, so a commit on
+# main is NOT checked automatically. Whatever HEAD is, it is likely ahead of the last
+# CI-tested commit -- check the run list before repeating any claim that CI verifies
+# this tree.
 
 on:
   pull_request:
     types: [opened, synchronize, reopened]
   workflow_dispatch:
+  push:
+    tags: ["v*"]
 
-# Deliberately NOT `push: branches: [main]` yet -- a cold run is ~112 vcpkg packages
-# plus a full MO2 build, and the one timed run (31526808970, 57 min) was also the run
-# that first populated the `files` cache, so the warm incremental cost is still
-# unmeasured. Dispatch one run against HEAD, read its duration, then decide.
+permissions:
+  contents: write   # only used by the release steps at the end
+
+# Deliberately NOT `push: branches: [main]` yet. The warm cost is now measured -- run
+# 31891530170 took 41 minutes with warm Qt and vcpkg caches, and that included a full
+# usvfs rebuild that will not recur -- so the objection is no longer "unknown cost".
+# It is that a stream of green runs on every commit proves little for a project with
+# one maintainer. Revisit when someone else is pushing to this repository.
+#
+# The `v*` tag trigger is different: a tag means a release, and a release must be the
+# build that the verification below just checked.
 
 jobs:
   build:
@@ -223,3 +230,101 @@ jobs:
           name: ModOrganizer2
           path: install/bin
           if-no-files-found: error
+
+      # --- release, only on a v* tag ----------------------------------------------
+      # These steps live in THIS workflow rather than a second one on purpose: a
+      # release has to be the same build the verification above just passed. A
+      # separate release workflow would be a second copy of the build logic, and
+      # duplicated facts drifting apart is the recurring bug in this project.
+
+      # The tag does NOT define the version -- version.rc does. This step exists so
+      # that a mistyped tag fails here rather than producing artifacts named after a
+      # version the binaries do not report. Same rule as the Qt pin above: derive it,
+      # never restate it.
+      - name: Check the tag against version.rc
+        id: ver
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: pwsh
+        run: |
+          $tag = "${{ github.ref_name }}" -replace '^v',''
+          $rc  = Get-Content repos/modorganizer/src/version.rc -Raw
+          $str = [regex]::Match($rc, 'VER_FILEVERSION_STR\s+"([0-9.]+)').Groups[1].Value
+          if (-not $str) {
+            throw "Could not read VER_FILEVERSION_STR from repos/modorganizer/src/version.rc. If it was renamed, update this step."
+          }
+          if ($tag -ne $str) {
+            throw "Tag v$tag does not match version.rc ($str). version.rc is the source of truth -- bump it, commit, then re-tag."
+          }
+          "version=$tag" | Out-File $env:GITHUB_OUTPUT -Append
+          Write-Host "Releasing $str"
+
+      - name: Package
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: pwsh
+        run: |
+          $v = "${{ steps.ver.outputs.version }}"
+          New-Item -ItemType Directory -Force dist | Out-Null
+
+          # Names mirror upstream's release assets so they are recognisable.
+          7z a -t7z -mx=9 "dist/Mod.Organizer-$v.7z"        ".\install\bin\*"     | Out-Null
+          7z a -t7z -mx=9 "dist/Mod.Organizer-$v-pdbs.7z"   ".\install\pdb\*"     | Out-Null
+          7z a -t7z -mx=9 "dist/Mod.Organizer-$v-uibase.7z" ".\install\include\*" ".\install\lib\*" | Out-Null
+
+          # commits.txt records the exact gitlink of all 34 repositories. Upstream
+          # ships a flat commit list; this is more useful, because these 34 lines plus
+          # this repository are the complete recipe for reproducing the build -- and
+          # they are what makes the GPL source offer concrete rather than nominal.
+          $out = @(
+            "Mod Organizer $v"
+            "superbuild: https://github.com/${{ github.repository }} @ ${{ github.sha }}"
+            ""
+            "Repositories (submodule gitlinks):"
+          )
+          $out += git submodule status | ForEach-Object {
+            if ($_ -match '^\s*.?([0-9a-f]{40})\s+(\S+)') { "  {0}  {1}" -f $matches[1], $matches[2] }
+          }
+          $out | Set-Content "dist/Mod.Organizer-$v-commits.txt" -Encoding utf8
+
+          Get-ChildItem dist | ForEach-Object { "{0,-45} {1,8:N1} MB" -f $_.Name, ($_.Length/1MB) }
+
+      - name: Create the release
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $v = "${{ steps.ver.outputs.version }}"
+
+          # Built as an array rather than a here-string: PowerShell requires the "@
+          # terminator at column 0, and YAML requires block-scalar content indented.
+          # The two cannot both be satisfied. Markdown code spans are avoided for the
+          # same class of reason -- backtick is PowerShell's escape character.
+          $notes = @(
+            "Mod Organizer $v -- a build of the [mo2-modern](https://github.com/mo2-modern) fork."
+            ""
+            "**This is not an official Mod Organizer 2 release.** Report problems here, not to upstream."
+            ""
+            "Built from source by [mo2-superbuild](https://github.com/${{ github.repository }}) on VS2026 / v145 / Qt 6.11.1 / Python 3.14."
+            ""
+            "### Downloads"
+            ""
+            "| File | What |"
+            "|---|---|"
+            "| **Mod.Organizer-$v.7z** | the portable build -- extract it and run ModOrganizer.exe |"
+            "| Mod.Organizer-$v-pdbs.7z | debug symbols, only needed for diagnosing a crash |"
+            "| Mod.Organizer-$v-uibase.7z | uibase headers and import libraries, for plugin authors |"
+            "| Mod.Organizer-$v-commits.txt | the exact commit of every repository in this build, and of the vcpkg pin |"
+            ""
+            "There is **no installer**. The portable archive is the only build -- upstream's installer is produced by a repository this project does not fork."
+            ""
+            "### Source"
+            ""
+            "GPL-3.0. Every repository is public under [mo2-modern](https://github.com/mo2-modern), and commits.txt names the exact commit each component was built from."
+          )
+          $notesFile = Join-Path $env:RUNNER_TEMP "release-notes.md"
+          $notes | Set-Content $notesFile -Encoding utf8
+
+          # dist/ holds only assets -- the notes deliberately live outside it.
+          $assets = Get-ChildItem dist | ForEach-Object { $_.FullName }
+          gh release create "${{ github.ref_name }}" $assets --title "Mod Organizer $v" --notes-file $notesFile
+          if ($LASTEXITCODE -ne 0) { throw "gh release create failed" }
