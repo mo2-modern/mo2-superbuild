@@ -138,8 +138,9 @@ Not this repository. See [Two trees](#two-trees).
 | `*.log` (root) | only the 7 logs the docs cite; `final.log` is the definitive full-tree run |
 | `logs-archive/` | superseded build logs, kept for history — nothing references them |
 
-`F:\dev\mo2` is the **old, pre-fork tree**. Treat it as **read-only** — it is the known-good
-reference build used for output diffs.
+A pre-fork tree, if you kept one, is the **known-good reference** for output diffs. Treat it as
+**read-only**. This document deliberately does not name a location for it, or for the mob tree —
+both are wherever you put them.
 
 ⚠️ **`tidy/`, `regen-tidy.ps1` and `%LocalAppData%\clangd\config.yaml` are not in any repo.** A
 fresh clone lacks all of them — the same trap as `.git/hooks`.

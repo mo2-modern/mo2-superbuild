@@ -523,11 +523,12 @@ the ini, falls back to `vswhere` for VS, and cannot find Qt at all:
 **That bail-out is luck, not a safety net.** Qt is the *only* setting with no auto-detect fallback.
 `paths.vs` auto-detects happily — so on a machine where Qt happens to be on `PATH`, the same mistake
 builds to completion against a **different Visual Studio and a different vcpkg**, which is exactly
-the `VCPKG_ROOT` hijack above with no error to notice. **Always invoke mob from `F:\dev\mo2-modern`.**
+the `VCPKG_ROOT` hijack above with no error to notice. **Always invoke mob from the root of the mob
+working tree** — the directory holding `mob.ini`.
 
 Note for tool-driven sessions: the Bash and PowerShell tools **share one working directory**, so a
 `cd` in a Bash call silently relocates the next PowerShell `mob` invocation. Pin it —
-`Set-Location F:\dev\mo2-modern` — in the same command that runs mob. **Diagnostic:** a good run
+`Set-Location <mob-tree>` — in the same command that runs mob. **Diagnostic:** a good run
 prints `[conf] using vcvars at …\18\Community\…` and `appending to PATH: …\tools\Qt\…` within the
 first 10 lines; a run that calls `vswhere.exe` instead has not read the ini.
 
@@ -647,7 +648,8 @@ to `%LOCALAPPDATA%\ModOrganizer\<instance>\logs\mo_interface.log`. Only the seco
 `data path: C:/Users/USERNAME/AppData/...`, which is the line the check is about.
 
 🪤 **A portable instance cannot verify masking at all**, and fails in the shape this file is about: it
-lives under `F:\`, so its log holds **no** `C:/Users/…` path, and a grep returns 0 masked *and*
+lives outside the user profile — on whatever drive you put it on — so its log holds **no**
+`C:/Users/…` path at all, and a grep returns 0 masked *and*
 0 leaked — indistinguishable from a clean pass. **Assert the denominator** (user-profile paths
 present at all) before concluding anything. Verified 2026-08-10 on a global instance: 1 of 1 masked,
 0 leaks.

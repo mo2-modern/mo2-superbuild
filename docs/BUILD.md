@@ -57,7 +57,7 @@ Six steps, once per machine. Skip this if you are using the superbuild.
 **2. Get the sources.**
 
 ```powershell
-git clone --recursive https://github.com/mo2-modern/mob.git F:\dev\mo2-modern\mob
+git clone --recursive https://github.com/mo2-modern/mob.git <mob-tree>\mob
 ```
 
 The 33 MO2 repos are submodules of `build/build`. `usvfs` is not one of them; mob clones it through
@@ -93,8 +93,8 @@ layout. **The module list is not optional**, and it fails in two directions:
 **4. Get vcpkg.**
 
 ```powershell
-git clone https://github.com/microsoft/vcpkg.git F:\dev\mo2-modern\vcpkg
-git -C F:\dev\mo2-modern\vcpkg checkout ea1a7396b05637a53bf23c078647ecc0edee4b80
+git clone https://github.com/microsoft/vcpkg.git <mob-tree>\vcpkg
+git -C <mob-tree>\vcpkg checkout ea1a7396b05637a53bf23c078647ecc0edee4b80
 ```
 
 That commit is the baseline every manifest in the tree declares. Do not use a newer one without
@@ -104,16 +104,22 @@ updating the baselines with it.
 it is specific to one machine. mob reads it from the current working directory, so always run mob
 from that root; run it from anywhere else and mob silently falls back to auto-detection.
 
+Substitute your own absolute paths; mob does not accept relative ones. `<mob-tree>` is wherever you
+cloned in step 2, and `<vs>` is your Visual Studio installation — the edition suffix is
+`Community`, `Professional` or `Enterprise` depending on what you have.
+
 ```ini
 [paths]
-prefix     = F:/dev/mo2-modern/build
-qt_install = F:/dev/mo2-modern/tools/Qt/6.11.1/msvc2022_64
-vcpkg      = F:/dev/mo2-modern/vcpkg
-vs         = C:/Program Files/Microsoft Visual Studio/18/Community
+prefix     = <mob-tree>/build
+qt_install = <mob-tree>/tools/Qt/6.11.1/msvc2022_64
+vcpkg      = <mob-tree>/vcpkg
+vs         = <vs>
 
 [tools]
+; vswhere really does live at this fixed location -- it ships with the VS Installer,
+; not with any edition, so this line is the same on every machine.
 vswhere    = C:/Program Files (x86)/Microsoft Visual Studio/Installer/vswhere.exe
-vcvars     = C:/Program Files/Microsoft Visual Studio/18/Community/VC/Auxiliary/Build/vcvarsall.bat
+vcvars     = <vs>/VC/Auxiliary/Build/vcvarsall.bat
 ```
 
 Set `vcpkg` and `vs` explicitly, not from the environment. Visual Studio's `vcvarsall.bat`
@@ -126,15 +132,19 @@ both VS2022 and VS2026 installed it matches both and mob bails out.
 py -3.14 -m pre_commit install
 ```
 
-Paths in this document are `F:\dev\mo2-modern` because that is the tree they were written against.
-Nothing requires that location except `mob.ini` and `env.ps1`, both of which you are editing anyway.
+> **On the placeholders.** `<mob-tree>` is wherever you cloned mob, `<vs>` your Visual Studio
+> installation, `<known-good>` a reference build to diff against. Nothing in this project requires
+> any particular location, so this document names none — it used to be written against one specific
+> machine's layout, which read as a requirement and was wrong the moment that machine changed.
+> `mob.ini` and `env.ps1` are the only files that need real absolute paths, and neither is
+> committed.
 
 ---
 
 ## Every session starts here
 
 ```powershell
-cd F:\dev\mo2-modern
+cd <mob-tree>
 .\env.ps1
 ```
 
@@ -254,7 +264,7 @@ it. **Opening a mod list is not enough either** — usvfs only injects when you 
 2. `mob build -l 5` from clean; confirm the generator line reads `Visual Studio 18 2026` / `v145`
 3. `ctest` where targets exist (`uibase`, `plugin_python`) — **mob path only; see below**
 4. **Launch `ModOrganizer.exe`, add a game instance, install a mod, and launch the game through it**
-5. Diff `build\install\bin` against the known-good `F:\dev\mo2\build\install\bin`
+5. Diff `build\install\bin` against a `<known-good>\build\install\bin` — a previous build you trust
 
 🔴 **`ctest` in the superbuild runs nothing and reports success.** Verified 2026-08-15: `ctest -C
 RelWithDebInfo` in `build/` prints *"No tests were found!!!"* and **exits 0**. Do not use it as a
