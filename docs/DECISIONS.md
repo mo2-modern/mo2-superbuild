@@ -489,28 +489,41 @@ messages and older notes citing them still resolve. Do not renumber them.
 ---
 
 ## ADR-023
-### Building installs, via a target in `ALL` rather than the solution setting alone
-**2026-08-15 · Accepted**
+### Build and install stay separate steps
+**2026-08-15 · Accepted (supersedes the same-day decision to fold install into `ALL`)**
 
-`CMAKE_VS_INCLUDE_INSTALL_TO_DEFAULT_BUILD` stays, and a `mo2-install` custom target in `ALL` is
-added beside it. It depends on every target collected by walking `SUBDIRECTORIES` /
-`BUILDSYSTEM_TARGETS`, so it runs last, and it invokes `cmake --install` with `$<CONFIG>`.
+Install is **not** part of the default build. `cmake --build` compiles; `cmake --install` deploys.
+Neither `CMAKE_VS_INCLUDE_INSTALL_TO_DEFAULT_BUILD` nor a custom install target in `ALL` is used.
 
-**Why:** the setting alone only covers opening the generated `build\mo2.slnx`. The flow the README
-documents — open the *folder* — is Visual Studio's CMake mode, which builds via `cmake --build` and
-never reads the solution's project list. Measured on a clean clone: exit 0, 0 errors, 0 warnings,
-46 projects linked, and **no `install/` at all**, leaving only the `build\` copy of
-`ModOrganizer.exe`, which has no plugins, Qt runtime or usvfs beside it and cannot start.
+**Why:** it is the conventional contract, and every tool already implements it. Visual Studio's
+CMake integration exposes **Build → Install mo2** natively, alongside Build All / Rebuild All /
+Clean All, and its debug-target list offers an `(Install)` variant per target. Rider and the command
+line have the same split. A build that silently rewrote a deployment tree would be the surprising
+behaviour, and it makes "did my change reach the thing I am running?" ambiguous — the answer should
+be a step you took, not a side effect.
 
-**Why a collected dependency list and not a written one:** a hand-listed set silently stops covering
-repositories as they are added, and the failure is a race rather than an error.
+**What it costs, and why that is acceptable:** MO2 only runs from `install/`, so a build alone
+produces nothing runnable. That is a documentation problem, not a build-system one. It is handled by
+saying so in the README's getting-started steps, and by `mo2_set_project_to_run_from_install`
+pointing the debugger command at the install tree, so Run cannot quietly launch the unrunnable
+`build/` copy.
 
-**Cost, measured warm:** `ALL_BUILD` alone 5.3 s, with the install 12.8 s. Accepted, because the
-install is idempotent — every rename in `mo2_deploy_qt` is guarded by an `EXISTS` test.
+### The superseded decision, and why it was wrong
 
-**Rejected:** telling people to build the `INSTALL` target by hand. "Open the folder and press
-build" is the entire premise of this repository; a second mandatory step is the thing it exists to
-remove.
+Earlier the same day this was decided the other way: a `mo2-install` target in `ALL`, depending on
+every target collected by walking `SUBDIRECTORIES` / `BUILDSYSTEM_TARGETS`. The reasoning was that
+`CMAKE_VS_INCLUDE_INSTALL_TO_DEFAULT_BUILD` covers only the generated `build\mo2.slnx`, while the
+documented flow — open the *folder* — is CMake mode, which builds through `cmake --build` and never
+reads the solution's project list. That observation was correct and is worth keeping: measured on a
+clean clone, `cmake --build` exits 0 with 0 errors, 0 warnings, 46 projects linked and **no
+`install/` at all**.
+
+The error was the conclusion. "A build produces nothing runnable" was treated as a build-system
+defect to be engineered around, when it is the normal contract of every CMake project, and the IDE
+already exposed the missing step on its own Build menu. The fix belonged in the README.
+
+**Rejected, again:** making install a build side effect for convenience. If a user must be told
+which button to press, tell them — do not make one button do two jobs.
 
 ---
 

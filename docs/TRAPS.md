@@ -301,26 +301,25 @@ but `importlib.metadata` could resolve either. Clear with `mob build -c <python 
 
 ## Superbuild and clone
 
-🔴 **`cmake --build build` exits 0, links every project, and used to leave `install/` non-existent.**
-`CMAKE_VS_INCLUDE_INSTALL_TO_DEFAULT_BUILD` adds the INSTALL **project** to the generated
-*solution's* default build, so it only covers opening `build/mo2.slnx` and pressing Build Solution.
-It does nothing for the flow the README documents — "open the folder, pick the preset, build" is
-Visual Studio's **CMake mode**, and it, Rider and the command line all build by running
-`cmake --build`, which builds `ALL_BUILD` and never reads the solution's project list.
-
-Measured 2026-08-15 on a clean clone: exit 0, 0 errors, 0 warnings, 471 TUs, 46 projects linked,
-and **no `install/` directory at all**. The only `ModOrganizer.exe` was in
+🔴 **`cmake --build build` exits 0, links every project, and leaves `install/` untouched — by
+design.** Build and install are separate steps ([ADR-023](DECISIONS.md#adr-023)), so a green build
+is *not* a deployed MO2. Measured 2026-08-15 on a clean clone: exit 0, 0 errors, 0 warnings, 471
+TUs, 46 projects linked, and no `install/` directory. The only `ModOrganizer.exe` was in
 `build/modorganizer/src/RelWithDebInfo/`, where it has no plugins, no Qt runtime, no usvfs and no
 stylesheets beside it and therefore cannot start.
 
-**Fixed** by the `mo2-install` target in the top-level `CMakeLists.txt`, which is in `ALL`, depends
-on every target collected from the directory tree, and runs `cmake --install`. Cost measured warm:
-`ALL_BUILD` alone 5.3 s, with the install 12.8 s.
+Run `cmake --install build --config RelWithDebInfo`, or **Build → Install mo2** in Visual Studio.
 
-⚠️ **The shape of the mistake is what to remember:** the setting was verified to *exist* and to be
-the documented mechanism, and never verified to *fire* in the flow the README tells people to use.
-That is the same error as #2 below, two years apart. **Assert on `install/bin/ModOrganizer.exe`,
-never on the build's exit code.**
+⚠️ **`CMAKE_VS_INCLUDE_INSTALL_TO_DEFAULT_BUILD` does not do what its name suggests here.** It adds
+the INSTALL **project** to the generated *solution's* default build, so it affects only
+`build/mo2.slnx` opened as a solution. The flow this project documents — open the folder — is
+Visual Studio's **CMake mode**, which builds through `cmake --build` and never reads the solution's
+project list. If you ever reach for that variable expecting folder-mode builds to install, it will
+appear to do nothing.
+
+🔴 **Assert on `install/bin/ModOrganizer.exe`, never on a build's exit code.** A build's success
+says nothing about whether anything was deployed, and after any change that renames or relocates an
+artifact the install tree can be simultaneously green and stale — `cmake --install` never deletes.
 
 🪤 **A first build leaves 25 of the 34 submodules dirty, and that is expected.**
 `mo2_add_translations` runs `lupdate`, which rewrites each repository's `*_en.ts` **in place** —

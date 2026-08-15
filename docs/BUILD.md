@@ -29,7 +29,8 @@ Symptoms a first build actually produces, and what each one means.
 | Configure stops asking for `git submodule update --init` | Cloned without `--recursive`. Run it; the check exists so you fail here rather than on a missing toolchain file. |
 | Configure appears frozen for several minutes with no output | `usvfs` is building, twice, once per architecture. It captures its output, so nothing prints. Expected on the first configure only. |
 | Run launches something that immediately fails to start | The startup item is pointing at `build\`, not `install\`. Pick **ModOrganizer 2 (install tree)** in Visual Studio. In Rider, which does not read `.vs\launch.vs.json`, run `install\bin\ModOrganizer.exe` directly. |
-| The build is green but `install\` is empty | Should be impossible since [ADR-023](DECISIONS.md#adr-023). If it happens, you have found a regression in the `mo2-install` target — read that ADR first. |
+| The build is green but `install\` is empty or stale | Expected — install is a separate step ([ADR-023](DECISIONS.md#adr-023)). Run **Build → Install mo2**, or `cmake --install build --config RelWithDebInfo`. |
+| You cannot find `install\` or `build\` in Solution Explorer | Both are gitignored, and Visual Studio's Folder View hides ignored items. Toggle **Show All Files** in the Solution Explorer toolbar. |
 | 25 submodules show as modified after a build | `lupdate` rewrites each repository's `*_en.ts` in place. It is churn, not damage; clear it with `git -C repos/<name> checkout -- .` and do not commit it. |
 | Configure fails on a missing Qt component after a long wait | The Qt module list is incomplete. It is generated from `MO2_QT_MODULES`; do not hand-edit a copy of it anywhere. See [TRAPS.md](TRAPS.md#toolchain). |
 | Configure fails saying `qt/` holds the wrong Qt | Deliberate: the build refuses to delete several GB it did not create. Remove `qt/` yourself, or point `-DMO2_QT_DIR=` at a good one. |

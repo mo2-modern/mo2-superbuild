@@ -40,18 +40,27 @@ configure stops and tells you to run `git submodule update --init`.
 
 1. Open the **folder** (not a solution file) and select the `vs2026` preset. Configuring starts
    automatically.
-2. **Build → Build All.** This compiles and installs.
-3. Select the **ModOrganizer 2 (install tree)** startup item and run.
+2. **Build → Build All.**
+3. **Build → Install mo2.**
+4. Select the **ModOrganizer 2 (install tree)** startup item and run.
 
 ### Command line
 
 ```console
 cmake --preset vs2026
 cmake --build build --config RelWithDebInfo
+cmake --install build --config RelWithDebInfo
 ```
 
-Both produce `install/bin/ModOrganizer.exe`. Run MO2 from there — the copy left in `build/` has no
-plugins, Qt runtime or usvfs alongside it and will not start.
+Both routes produce `install/bin/ModOrganizer.exe`.
+
+> **Build and install are separate steps, and MO2 only runs from `install/`.** The executable left
+> in `build/` has no plugins, Qt runtime or usvfs alongside it and will not start. Building without
+> installing is not an error — it just means the install tree still holds whatever was last deployed
+> there. See [ADR-023](docs/DECISIONS.md#adr-023).
+
+`install/` and `build/` are in `.gitignore`, so Visual Studio's Folder View hides them by default.
+Use **Show All Files** in the Solution Explorer toolbar if you want to browse the output.
 
 > **The first configure takes roughly ten minutes and appears to stall.** It downloads Qt, resolves
 > around 112 vcpkg packages, and builds usvfs twice, once per architecture. The usvfs step produces
@@ -90,8 +99,9 @@ only one architecture. It is therefore built and installed for both at *configur
 `ExternalProject_Add` cannot be used, because it builds at build time while `find_package(usvfs)`
 must resolve during configure.
 
-Building also installs, and it has to: MO2 only runs out of a populated install tree, and the
-stylesheets, Explorer++ and license texts that MO2 ships are fetched and deployed by that step.
+The install step does more than copy build output. It deploys the Qt runtime with `windeployqt`,
+and the stylesheets, Explorer++ and third-party license texts that MO2 ships are fetched and laid
+out there. That is why a build alone leaves nothing runnable.
 
 ```
 CMakeLists.txt               the superbuild

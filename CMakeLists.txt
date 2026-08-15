@@ -576,76 +576,23 @@ mo2_add_repo(installer_omod)
 #                   C++/CLI. MSBuild-only, and installer_omod needs a NuGet
 #                   restore for its .NET references.
 
-# --- what you get when you press Build --------------------------------------------
-# "Open the folder, press Build, get a working MO2" needs two things, and both have
-# to be set here rather than in cmake_common, because both are read from the
-# top-level scope only.
+# --- build and install are separate steps ------------------------------------------
+# Install is NOT folded into the default build. Build compiles, install deploys; an
+# IDE exposes both (Visual Studio's Build menu carries "Install mo2"), and the command
+# line spells them `cmake --build build` and `cmake --install build`. Keeping them
+# separate is the conventional contract, and a build that silently rewrote a
+# deployment tree would be the surprising thing -- see ADR-023.
 #
-#   INSTALL in the default build
-#       mo2.cmake already sets CMAKE_VS_INCLUDE_INSTALL_TO_DEFAULT_BUILD, but it
-#       arrives through find_package(mo2-cmake) inside each repository, so it lands
-#       in that repository's directory scope and never reaches the solution --
-#       ALL_BUILD.vcxproj ends up with no reference to INSTALL at all. Setting it
-#       here is what actually puts INSTALL into the default build. Without it a
-#       green build leaves install/ empty, and install/ is the only place MO2 can
-#       run from: the build tree has no plugins, stylesheets, usvfs or Qt runtime
-#       beside the executable.
+# What this costs is that `install/` is the only place MO2 can run from, so a build
+# alone produces nothing runnable. That is a documentation problem rather than a build
+# one, and it is documented: the README says to install, and organizer's debugger
+# command points at the install tree so Run cannot silently start the wrong binary.
 #
-#   the startup project
-#       mo2_configure_target() sets VS_STARTUP_PROJECT on ${PROJECT_SOURCE_DIR},
-#       i.e. each repository's own directory. Visual Studio reads that property from
-#       the top-level source directory only, so all ~20 of those are silently
-#       ignored and the IDE falls back to the first target alphabetically: archive,
-#       a DLL, which cannot be launched at all.
-set(CMAKE_VS_INCLUDE_INSTALL_TO_DEFAULT_BUILD ON)
+# The startup project has to be set here rather than in cmake_common, because
+# mo2_configure_target() sets VS_STARTUP_PROJECT on ${PROJECT_SOURCE_DIR} -- each
+# repository's own directory -- and Visual Studio reads that property from the
+# top-level source directory only. All ~20 of those are silently ignored, and the IDE
+# falls back to the first target alphabetically: archive, a DLL, which cannot be
+# launched at all.
 set_property(DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
              PROPERTY VS_STARTUP_PROJECT organizer)
-
-# --- ...and the same thing again, for the way the README actually tells you to open it -----
-#
-# CMAKE_VS_INCLUDE_INSTALL_TO_DEFAULT_BUILD above is necessary and not sufficient. It
-# adds the INSTALL *project* to the generated solution's default build, so it covers
-# opening build/mo2.slnx and pressing Build Solution.
-#
-# It does nothing for the flow this project actually documents. "Open the folder, pick
-# the vs2026 preset, build" is Visual Studio's CMake mode, and both it and Rider build
-# by running
-#
-#     cmake --build build --config RelWithDebInfo
-#
-# which builds the default target -- ALL_BUILD -- and never looks at the solution's
-# project list. Measured 2026-08-15 on a clean clone: that command exits 0, reports 0
-# errors and 0 warnings, links 46 projects, and leaves install/ NON-EXISTENT. The
-# ModOrganizer.exe it produces sits in build/modorganizer/src/RelWithDebInfo/ with no
-# plugins, no Qt runtime, no usvfs and no stylesheets beside it, so it cannot start.
-# A green build with nothing runnable at the end of it is precisely the failure mode
-# docs/TRAPS.md exists to catalogue.
-#
-# So put the install in ALL_BUILD too. It has to run after everything else, which means
-# depending on every target in the tree -- collected rather than listed, because a
-# hand-written list silently stops covering repositories as they are added.
-function(mo2_collect_targets outvar dir)
-  get_property(_targets DIRECTORY "${dir}" PROPERTY BUILDSYSTEM_TARGETS)
-  get_property(_subdirs DIRECTORY "${dir}" PROPERTY SUBDIRECTORIES)
-  foreach(_subdir IN LISTS _subdirs)
-    mo2_collect_targets(_sub_targets "${_subdir}")
-    list(APPEND _targets ${_sub_targets})
-  endforeach()
-  set(${outvar} "${_targets}" PARENT_SCOPE)
-endfunction()
-
-# Collect BEFORE creating the target below, so it cannot depend on itself.
-mo2_collect_targets(_mo2_all_targets "${CMAKE_CURRENT_SOURCE_DIR}")
-
-# $<CONFIG> and not a fixed configuration: this is a multi-config generator, and
-# installing RelWithDebInfo artifacts from a Debug build would produce a mixed tree.
-add_custom_target(mo2-install ALL
-  COMMAND "${CMAKE_COMMAND}" --install "${CMAKE_BINARY_DIR}" --config $<CONFIG>
-  COMMENT "[MO2] installing into ${CMAKE_INSTALL_PREFIX}"
-  VERBATIM)
-add_dependencies(mo2-install ${_mo2_all_targets})
-
-# Cost of doing this on every build, measured warm on a fully built tree: ALL_BUILD
-# alone 5.3 s, ALL_BUILD plus this install 12.8 s. The install is idempotent -- every
-# rename in mo2_deploy_qt is guarded by an EXISTS test -- so re-running it costs the
-# ~7 s and changes nothing else.
