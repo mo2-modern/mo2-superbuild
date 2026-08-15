@@ -8,22 +8,38 @@ name: Build MO2
 # something per-repo CI never does, that the repositories build *together* at the
 # commits the gitlinks name.
 #
-# 🔴 IT HAS NEVER PROVEN THAT, because it has never run. `runs-on` below is not a
-# GitHub-hosted label, so without a self-hosted runner of that name a job queues
-# forever instead of failing visibly, and the triggers exclude `push` -- so no
-# commit on main has ever been checked. Treat every "verified in CI" claim about
-# this project as unsupported until either a runner exists or the label is
-# changed to one that does. An unexecutable workflow is worse than none: it
-# launders unverified claims.
+# It has run, and it has already paid for itself once. Three workflow_dispatch runs
+# on 2026-08-11, all picked up by the runner within seconds of being queued:
+#
+#   31518812267  e468982  FAILED at Configure -- the missing qtwebsockets and
+#                         qtnetworkauth, four months undetected because every local
+#                         machine already had a fuller Qt. Fixed in ecb0de0. This is
+#                         the run that justifies the workflow existing.
+#   31522069038  ecb0de0  succeeded, but with the removed x-gha cache backend, so it
+#                         built all 112 packages from source while reporting success
+#   31526808970  3b72f46  succeeded, 57 minutes, with the `files` cache below
+#
+# ⚠️ What is NOT proven, and matters more than the above: the last CI-tested commit
+# is 3b72f46 (2026-08-11). Everything since -- the Explorer++ re-download fix, the
+# download hashes, the build/install split -- is untested here, because there is no
+# `push` trigger and nobody has dispatched a run against HEAD. The two steps added
+# on 2026-08-15 have therefore NEVER EXECUTED: reading the Qt pin out of
+# CMakeLists.txt, and verifying the install tree. The second is the only automated
+# check in the project that can see a missing qtimageformats.
+#
+# So: "CI is green" is true of a commit four days behind main, and the steps written
+# to catch silent failures are exactly the ones that have never run. Dispatch a run
+# against HEAD before repeating any claim that CI verifies this tree.
 
 on:
   pull_request:
     types: [opened, synchronize, reopened]
   workflow_dispatch:
 
-# Deliberately NOT `push: branches: [main]` while this is unproven -- a cold run
-# is ~112 vcpkg packages plus a full MO2 build. Turn it on once a warm cache has
-# shown the incremental cost.
+# Deliberately NOT `push: branches: [main]` yet -- a cold run is ~112 vcpkg packages
+# plus a full MO2 build, and the one timed run (31526808970, 57 min) was also the run
+# that first populated the `files` cache, so the warm incremental cost is still
+# unmeasured. Dispatch one run against HEAD, read its duration, then decide.
 
 jobs:
   build:
@@ -187,8 +203,14 @@ jobs:
           # on a quantity that is known would pass with 28 of them missing.
           if ($stylesheets.Count -lt 29) { $errors += "expected 29 deployed stylesheet entries, found $($stylesheets.Count)" }
 
+          # Derived from the source directory rather than hardcoded: this repository
+          # owns licenses/, so a count written here would be a second copy of a fact
+          # one `git add` away from changing.
+          $expectedLicenses = @(Get-ChildItem 'licenses' -File).Count
           $licenses = @(Get-ChildItem 'install/bin/licenses' -ErrorAction SilentlyContinue)
-          if ($licenses.Count -lt 18) { $errors += "expected 18 third-party licence texts, found $($licenses.Count)" }
+          if ($licenses.Count -lt $expectedLicenses) {
+            $errors += "expected $expectedLicenses third-party licence texts (one per file in licenses/), found $($licenses.Count)"
+          }
 
           if ($errors) {
             $errors | ForEach-Object { Write-Host "::error::$_" }
