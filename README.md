@@ -1,123 +1,148 @@
-# MO2 — open, build, run
+# Mod Organizer 2 — Superbuild
 
-Every Mod Organizer 2 repository, built as one CMake project. Open the folder, press build, get a
-working MO2. No `env.ps1`, no mob, no environment variables.
+One CMake project that builds all of Mod Organizer 2 from source. Clone it, open the folder in your
+IDE, press build, and get a working `ModOrganizer.exe`.
 
-## You need
+[Mod Organizer 2](https://github.com/ModOrganizer2) is a mod manager for Bethesda games. Its source
+is spread across 34 git repositories, and upstream builds them with `mob`, a purpose-built
+orchestrator that clones, configures, builds and *installs* each repository in turn so that the next
+one can find it. That works, but it means a bespoke tool, a machine-specific `mob.ini`, an
+environment script, and a build you cannot drive from an IDE.
 
-| | |
-|---|---|
-| **Visual Studio 2026**, with the **v145** toolset | `.vsconfig` here lists the components to select, and VS offers to install them when you open the folder |
-| **Python 3.14**, with the **development headers** | use the python.org installer — a Store or embeddable build may lack `Python.h`, and CMake finds Python through the registry, not `PATH` |
-| **git** on `PATH` | needed to clone, and again during configure: Qt's installer is fetched with `pip install git+https://…` |
-| **~25 GB free** | Qt 3.3 GB, the vcpkg packages, ~1.9 GB of usvfs build trees, and the build and install trees |
+This repository replaces that with an ordinary CMake superbuild: the repositories are submodules,
+one `CMakeLists.txt` adds them all, and dependencies resolve in-tree without an install step. There
+is one project to open and one button to press. Nothing in the 34 upstream repositories is modified.
 
-That is the whole list — you do not need a standalone CMake, and one registered Python 3.14 serves
-both the build and the Qt installer. Qt, vcpkg, the repositories and every dependency are fetched
-for you.
+## Requirements
 
-## Then
+| Requirement | Notes |
+| --- | --- |
+| Visual Studio 2026, v145 toolset | The C++/CLI plugins require MSBuild; no Ninja-only setup can build them. `.vsconfig` lists the components to select. |
+| Python 3.14, with development headers | Use the python.org installer. CMake locates it through the registry, not `PATH`. |
+| Git, on `PATH` | Used to clone, and again during configure to fetch the Qt installer. |
+| ~25 GB free disk space | Qt is 3.3 GB; vcpkg packages, usvfs build trees and the output account for the rest. |
 
-```
+Qt, vcpkg, and every third-party dependency are downloaded automatically. A standalone CMake is not
+required — the build uses the one Visual Studio ships.
+
+Windows only. MO2 depends on Windows APIs and on DLL injection, and does not target other platforms.
+
+## Getting started
+
+```console
 git clone --recursive https://github.com/mo2-modern/mo2-superbuild
 ```
 
-1. Open the **folder** in Visual Studio 2026 or Rider.
-2. Pick the **`vs2026`** preset. Configure starts on its own.
-3. **Build → Build All.** This also installs — that is what makes the result runnable.
-4. Set the startup item to **`ModOrganizer 2 (install tree)`** and press Run.
+`--recursive` fetches the 34 repositories into `repos/` and vcpkg into `vcpkg/`. If you forget it,
+configure stops and tells you to run `git submodule update --init`.
 
-⚠️ **Step 4 is Visual Studio only.** It relies on `.vs/launch.vs.json`, which Rider does not read.
-In Rider, run `install\bin\ModOrganizer.exe` directly, or add a native-executable run configuration
-pointing at it. Everything before step 4 works the same in both.
+### Visual Studio
 
-⏱ **The first configure takes a while and looks idle in the middle of it.** It downloads Qt
-(3.3 GB), resolves ~112 vcpkg packages, and builds `usvfs` twice — once per architecture, because
-it ships both. The usvfs step prints nothing while it runs. It is not stuck. Later configures skip
-all of it.
+1. Open the **folder** (not a solution file) and select the `vs2026` preset. Configuring starts
+   automatically.
+2. **Build → Build All.** This compiles and installs.
+3. Select the **ModOrganizer 2 (install tree)** startup item and run.
 
-▶ **Run must launch out of `install\`.** The `ModOrganizer.exe` in `build\` has no plugins, no Qt
-runtime and no usvfs beside it, and cannot start. Step 4 picks the right one.
+### Command line
 
-## If something looks wrong
+```console
+cmake --preset vs2026
+cmake --build build --config RelWithDebInfo
+```
 
-| | |
-|---|---|
-| Cloned without `--recursive` | `git submodule update --init`. Configure stops and says so rather than failing on a missing toolchain file |
-| Run starts the wrong executable | pick the `ModOrganizer 2 (install tree)` startup item; if it is absent see [TRAPS.md](docs/TRAPS.md#ides) |
-| 25 submodules show as modified after a build | expected — `lupdate` rewrites `*_en.ts` in place. Noise, not damage. [TRAPS.md](docs/TRAPS.md#superbuild-and-clone) |
-| A green build with an empty `install\` | should be impossible now; if you see it, read [ADR-023](docs/DECISIONS.md#adr-023) |
-| You already have Qt | `-DMO2_QT_DIR=<prefix>`, or set `QTDIR`. Skips the download |
-| You would rather install Qt yourself | `-DMO2_AUTO_INSTALL_QT=OFF` — configure prints the exact `aqt` command and stops |
-| You already have an MO2 checkout from mob | `-DMO2_SOURCE_ROOT=<path>` reuses it instead of cloning several GB twice |
+Both produce `install/bin/ModOrganizer.exe`. Run MO2 from there — the copy left in `build/` has no
+plugins, Qt runtime or usvfs alongside it and will not start.
+
+> **The first configure takes roughly ten minutes and appears to stall.** It downloads Qt, resolves
+> around 112 vcpkg packages, and builds usvfs twice, once per architecture. The usvfs step produces
+> no output while it runs. Subsequent configures skip all of it.
+
+Running into something unexpected? See [Troubleshooting](docs/BUILD.md#troubleshooting).
+
+## Configuration
+
+Pass any of these to `cmake --preset vs2026 -D<option>=<value>`, or set them in your IDE's CMake
+settings.
+
+| Option | Default | Purpose |
+| --- | --- | --- |
+| `MO2_AUTO_INSTALL_QT` | `ON` | Download Qt when it cannot be found. Set `OFF` to be given the exact `aqt` command instead. |
+| `MO2_QT_DIR` | auto-detected | Use an existing Qt instead of downloading one. `QTDIR` works too. |
+| `MO2_QT_VERSION` | `6.11.1` | Qt version to build against. |
+| `MO2_SOURCE_ROOT` | `repos/` | Build a different MO2 checkout, such as one left over from `mob`. |
+| `MO2_QT_MODULES` | see `CMakeLists.txt` | Qt modules to install. The only copy of this list; the download and the printed instructions are both generated from it. |
+
+## How it works
+
+The repositories are submodules under `repos/`. This project holds no sources of its own and writes
+nothing into them; everything it produces lands in `build/` and `install/`.
+
+The problem a superbuild has to solve here is that the upstream repositories locate each other with
+64 `find_package(mo2-*)` calls, which normally require a prior `install`. Editing those calls would
+create merge conflicts against 34 projects on every sync, so they are left untouched and satisfied
+three ways: `cmake_common` on `CMAKE_PREFIX_PATH` resolves the 28 `mo2-cmake` calls directly,
+`cmake/superbuild-redirects/` stands in for the 29 sibling-library calls by asserting the target
+already exists in this build, and the remaining 7 are vcpkg registry ports that need no help.
+
+`usvfs` is the exception to the pattern. It is dual-architecture by design — the 32-bit DLL is
+injected into 32-bit games, the 64-bit one into 64-bit games — and a single CMake configure produces
+only one architecture. It is therefore built and installed for both at *configure* time.
+`ExternalProject_Add` cannot be used, because it builds at build time while `find_package(usvfs)`
+must resolve during configure.
+
+Building also installs, and it has to: MO2 only runs out of a populated install tree, and the
+stylesheets, Explorer++ and license texts that MO2 ships are fetched and deployed by that step.
+
+```
+CMakeLists.txt               the superbuild
+CMakePresets.json            the vs2026 preset
+vcpkg.json                   one dependency manifest for the whole project
+cmake/superbuild-redirects/  satisfies find_package(mo2-*) without installing
+.vs/launch.vs.json           points Run at the install tree
+repos/                       the 34 upstream repositories, as submodules
+```
 
 ## Documentation
 
 | Document | Read it when |
-|---|---|
-| [docs/BUILD.md](docs/BUILD.md) | Setting up a machine, building, verifying |
-| [docs/TRAPS.md](docs/TRAPS.md) | Before trusting any build output. Failure modes that report success instead of failing |
-| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Getting oriented: repos, fork model, toolchain |
-| [docs/DECISIONS.md](docs/DECISIONS.md) | Before changing anything structural |
-| [docs/UPSTREAM.md](docs/UPSTREAM.md) | Bugs found here that belong to upstream MO2 |
+| --- | --- |
+| [BUILD.md](docs/BUILD.md) | Setting up a machine, building, troubleshooting, verifying a build |
+| [ARCHITECTURE.md](docs/ARCHITECTURE.md) | Getting oriented: repositories, fork model, toolchain |
+| [DECISIONS.md](docs/DECISIONS.md) | Before changing anything structural — the reasoning is recorded as ADRs |
+| [TRAPS.md](docs/TRAPS.md) | Before trusting a build result. Failure modes that report success instead of failing |
+| [UPSTREAM.md](docs/UPSTREAM.md) | Bugs found here that belong to upstream MO2 |
 
-Some of these describe `mob`, the original build orchestrator, and the working tree it needs. That
-tree is not published. Treat those parts as background.
-
-## What this is
-
-A superbuild: one CMake project that configures every MO2 repository at once, so there is one
-solution to open and one button to press. It replaces the mob-driven cycle in which each repository
-had to be built *and installed* before the next could even configure.
-
-It holds no sources of its own. The repositories arrive as submodules under `repos/`, and everything
-this project produces lands in `build/` and `install/`.
-
-```
-CMakeLists.txt              the superbuild
-CMakePresets.json           the vs2026 preset an IDE reads
-vcpkg.json                  one manifest for the whole project
-cmake/superbuild-redirects/ makes find_package(mo2-*) work without installing first
-.vs/launch.vs.json          aims Run at install\, in Open-Folder mode
-```
-
-**usvfs is the one repository not simply added as a subdirectory.** It is dual-architecture by
-design, and a single CMake configure produces one architecture, so both are built and installed at
-*configure* time. `ExternalProject_Add` is the usual answer and is wrong here: it builds at *build*
-time, while `modorganizer`'s `find_package(usvfs)` must resolve during configure.
-
-**Nothing upstream was edited.** The **64** `find_package(mo2-*)` calls across the repositories are
-untouched, because every edited line is merge surface on every sync. They resolve three ways:
-`cmake_common` on `CMAKE_PREFIX_PATH` covers the **28** `mo2-cmake` calls with no install step;
-`cmake/superbuild-redirects/` stands in for the **29** sibling-library calls; the remaining **7**
-(`mo2-dds-header`, `mo2-libbsarch`) are vcpkg registry ports and need nothing. See
-[ADR-001](docs/DECISIONS.md#adr-001).
+Parts of these describe `mob` and the working tree it needs, which is not published. Treat those
+sections as background.
 
 ## Status
 
-**All 33 buildable repositories build**, at 0 errors and 0 warnings. (`repos/` holds 34 submodules;
-`cmake_common` is CMake modules and is consumed, not built.) Verified 2026-08-15 from a cold tree —
-no `build/`, no `qt/`, no `install/` — running nothing but `cmake --preset vs2026` and
-`cmake --build build --config RelWithDebInfo`:
+All 33 buildable repositories compile at 0 errors and 0 warnings. (`repos/` holds 34 submodules;
+`cmake_common` is CMake modules, consumed rather than built.)
 
-| | |
-|---|---|
-| Qt | downloaded automatically: 3.32 GB, all modules, 23 s |
-| vcpkg | 112 packages restored from a local binary cache in 6.9 s |
-| configure | 0 errors, 0 warnings, 309 s — nearly all of it `usvfs`, built twice |
-| build | 0 errors, 0 warnings; 471 translation units, 46 projects linked |
-| install | populated by the build itself, no second command |
-| launch | reaches the first-run *Creating an instance* window, loading `usvfs_x64.dll`, `uibase.dll`, `Qt6Core.dll` and `platforms\qwindows.dll` from this tree |
+Last verified 2026-08-15 from a cold tree, with no `build/`, `qt/` or `install/` present, running
+only a configure and a build: Qt downloaded, configure and build clean, 471 translation units, 46
+projects linked, install tree populated by the build, and `ModOrganizer.exe` reaching its first-run
+window with usvfs, uibase and the Qt runtime loaded from `install/`.
 
-⚠️ **That 309 s is not a first-run estimate.** vcpkg's 112 packages came from a *local* cache. On a
-machine that has never built them, that step compiles from source and dominates everything else.
+That exercise does not cover usvfs *hooking*, which requires launching a game through MO2 and
+reading the result out of the instance log. See [TRAPS.md](docs/TRAPS.md#verification).
 
-⚠️ **A launch is not a usvfs verification.** It proves the DLL loads, not that it hooks anything.
-That needs a game launched **through** MO2 and is read out of the instance's `logs\usvfs-*.log` —
-see [TRAPS.md](docs/TRAPS.md#verification). An earlier run on a machine with a game installed showed
-46 hooks (45 `type overwrite`, 1 `type chained patch`), matching the mob-driven build; that was not
-re-measured here.
+## Contributing
 
-Install parity against the mob-built tree is **2 files**, both `usvfs_*targets-release.cmake` —
-Release-configuration CMake exports, which this build does not produce because MO2 ships
-RelWithDebInfo.
+The 34 repositories are forks tracking `ModOrganizer2/*`. Each keeps `master` as a pure upstream
+mirror and does all work on `modern`; see [ADR-001](docs/DECISIONS.md#adr-001). Changes to the
+superbuild itself belong in this repository, and changes to MO2 belong in the relevant submodule.
+
+Read [DECISIONS.md](docs/DECISIONS.md) before altering anything structural — most of the
+non-obvious choices here are load-bearing and the reasoning is written down. Please do not
+reintroduce a second copy of any version or module list; several of the recorded failures in
+[TRAPS.md](docs/TRAPS.md) are duplicated facts that drifted apart.
+
+## License
+
+Mod Organizer 2 is GPL-3.0. Third-party license texts redistributed with the build are vendored in
+[`licenses/`](licenses/) and installed alongside the application.
+
+> **This repository does not yet carry a license file of its own.** Until it does, the superbuild's
+> own CMake and documentation are unlicensed. See [issue tracker](https://github.com/mo2-modern/mo2-superbuild/issues).
