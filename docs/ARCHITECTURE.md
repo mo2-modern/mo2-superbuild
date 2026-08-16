@@ -95,31 +95,31 @@ assembly logic.
 end to end. This matters because the obvious objection to the project is that it only builds *our*
 forks, and that turns out not to be true.
 
-**To do it yourself:**
+**To do it yourself:** clone the `build-upstream` branch, which is this same superbuild with every
+submodule pointed at `ModOrganizer2/*` instead of the forks.
 
 ```powershell
-.\scripts\export-upstream.ps1
+git clone --recursive -b build-upstream https://github.com/mo2-modern/mo2-superbuild mo2-upstream
 ```
 
-That writes an unmodified upstream tree to `..\mo2-upstream` and prints the exact `cmake` command to
-build it. Each fork's `master` is an untouched upstream mirror ([ADR-001](DECISIONS.md#adr-001)), so
-the sources are already in the objects you cloned — it needs no network and no second multi-GB
-clone. It uses `git archive`, so nothing under `repos/` is checked out, switched or fetched, and an
-interrupted run leaves nothing to clean up.
+Then build it exactly as the README describes. Nothing else differs: same `CMakeLists.txt`, same
+preset, same CI, same redirects — only `.gitmodules` and the gitlinks change.
 
-Two things it will tell you rather than paper over:
+⚠️ **It needs Python 3.13, not 3.14.** Upstream's `cmake_common` pins `MO2_PYTHON_VERSION` to 3.13
+and `plugin_python` requires it `EXACT`, so configure stops at the preflight otherwise. That is
+upstream's constraint, not a superbuild limitation, and it is the one thing that differs from
+building `main`.
 
-- **`origin/master` is only as current as the last sync.** No submodule but `modorganizer` has an
-  `upstream` remote (see [Upstream sync](#upstream-sync)), so there is no fresher reference locally.
-  Once remotes exist, pass `-Ref upstream/master`.
-- **Upstream pins Python 3.13** and `plugin_python` requires it `EXACT`, so on a 3.14-only machine
-  configure stops at the preflight. The script checks which interpreters you have and says so before
-  you spend anything. Editing the pin in the exported tree works, and means it is no longer strictly
-  upstream — which is the one deviation the run below needed.
+**What "upstream" does and does not mean here.** The *sources* are upstream's, unmodified. The
+*dependency graph* is still ours: the superbuild resolves everything from one root `vcpkg.json`
+([ADR-013](DECISIONS.md#adr-013)), which names `mo2-modern/vcpkg-registry`, while upstream's own
+repositories name `ModOrganizer2/vcpkg-registry` at older baselines. So this branch answers "do
+upstream's sources build under our infrastructure", which is the question worth asking, and not "is
+this byte-identical to what upstream's own CI produces".
 
-Build it with a **separate build and install directory** (the printed command does): `--preset
-vs2026` cannot be used, because the preset hardcodes `binaryDir` and would point the upstream build
-at your own `build/`.
+**Keeping it current:** bump the gitlinks to upstream's newer `master` commits, and merge `main`
+into the branch to pick up build-system changes. That merge conflicts on `.gitmodules` every time,
+predictably and in one file — the branch exists precisely to hold that one difference.
 
 | Stage | Result |
 |---|---|
@@ -188,7 +188,6 @@ purely mechanical:
 | `vcpkg.json` | one dependency manifest for the whole project |
 | `cmake/superbuild-redirects/` | satisfies `find_package(mo2-*)` without installing |
 | `cmake/aqt-requirements.txt` | hash-locked dependency closure for the Qt installer |
-| `scripts/export-upstream.ps1` | exports unmodified upstream sources to build against |
 | `repos/` | the 34 upstream repositories, as submodules. Source edits happen here |
 | `vcpkg/` | pinned vcpkg clone, as a submodule |
 | `licenses/` | third-party texts shipped in `bin/licenses` |
