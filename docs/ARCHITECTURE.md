@@ -146,22 +146,29 @@ confirmed against 4.4.2.
 
 ### Upstream sync
 
-🔴 **There is no sync tooling in this repository, and the submodules have no `upstream` remote.**
-Each `repos/*` checkout has only `origin`, pointing at the `mo2-modern` fork, so nothing here can
-even fetch `ModOrganizer2/*` to compare against. A `sync-upstream.ps1` existed in the mob tree and
-survives among its leftovers; bringing it in — or rewriting it — is the first task of any upstream
-sweep, because the survey cannot be run without it.
+```powershell
+.\scripts\sync-upstream.ps1              # fetch and report; changes nothing
+.\scripts\sync-upstream.ps1 -Apply -Push # do it
+```
 
-When it is restored, the flow is [ADR-001](DECISIONS.md#adr-001)'s:
-`upstream/master → origin/master → merge into origin/modern`, never rebase. Keep `upstream` remotes
-fetch-only (`set-url --push upstream DISABLED`), and build their URLs over HTTPS — mob's
-`git add-remote` produced SSH URLs, which do not authenticate against a gh-credential-helper setup.
+Per repository it fast-forwards `master` from `ModOrganizer2/*` and merges `master` into `modern`,
+which is [ADR-001](DECISIONS.md#adr-001)'s flow. It cannot violate that ADR by accident: `master` is advanced by
+a **fast-forward-only ref update**, so a `master` that has been committed to fails loudly instead of
+being rewritten, and nothing is ever rebased.
 
-⚠️ **The merge-conflict path has never been exercised.** The one sync run that happened was clean
-because upstream had not moved.
+**Conflicts are never auto-resolved.** The merge is aborted, the repository is left clean, and the
+name is reported — a half-merged submodule is a worse thing to hand someone than a list.
 
-⚠️ **Conflict handling is still untested.** The first sync run was clean because upstream had not
-moved. The loop is proven; the merge-conflict path is not.
+It adds the fetch-only `upstream` remote where one is missing, so it works on a fresh clone. That
+closes a gap this document used to describe: no submodule had an upstream remote, so there was no
+way to compare against `ModOrganizer2/*` at all.
+
+⚠️ **A clean merge is not a working build.** After `-Apply`, the superbuild's gitlinks lag the
+submodules; commit them and rebuild before trusting anything.
+
+**Measured 2026-08-16:** all 34 repositories are level with upstream — verified twice, once through
+the script and once by asking GitHub directly for each `refs/heads/master`. Upstream has not moved
+since the last sync.
 
 ### Staying upstream-conformant
 
@@ -188,6 +195,7 @@ purely mechanical:
 | `vcpkg.json` | one dependency manifest for the whole project |
 | `cmake/superbuild-redirects/` | satisfies `find_package(mo2-*)` without installing |
 | `cmake/aqt-requirements.txt` | hash-locked dependency closure for the Qt installer |
+| `scripts/sync-upstream.ps1` | pulls upstream into every fork, per ADR-001 |
 | `repos/` | the 34 upstream repositories, as submodules. Source edits happen here |
 | `vcpkg/` | pinned vcpkg clone, as a submodule |
 | `licenses/` | third-party texts shipped in `bin/licenses` |
