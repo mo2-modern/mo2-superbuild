@@ -16,17 +16,17 @@ This repository replaces that with an ordinary CMake superbuild: the repositorie
 one `CMakeLists.txt` adds them all, and dependencies resolve in-tree without an install step. There
 is one project to open and one button to press.
 
-On `main`, the submodules under `repos/` are [`mo2-modern`](https://github.com/mo2-modern) forks of
-the upstream projects, not the upstream repositories themselves — they carry a toolchain modernization
-and a set of bug fixes ([UPSTREAM.md](docs/UPSTREAM.md)). What the superbuild does not do is *edit*
-them: the assembly is arranged so that not one line inside those 34 repositories has to change,
-because every changed line is merge surface on every upstream sync
-([ADR-001](docs/DECISIONS.md#adr-001)). Point `MO2_SOURCE_ROOT` at a different checkout and it
-builds that instead.
+**What it builds by default is the [`mo2-modern`](https://github.com/mo2-modern) fork** — MO2 on a
+current toolchain, with the bug fixes listed in [UPSTREAM.md](docs/UPSTREAM.md). That is what this
+project exists for and what the [releases](../../releases) contain. On `main`, the submodules under
+`repos/` are those forks, not the upstream repositories.
 
-There is also a **`build-upstream`** branch: the same superbuild with the submodules pointed at
-`ModOrganizer2/*` instead, so a recursive clone of it builds unmodified upstream MO2. See
-[ARCHITECTURE.md](docs/ARCHITECTURE.md#the-superbuild-is-not-fork-specific).
+**Unmodified upstream MO2 builds too**, on the `build-upstream` branch — the same superbuild with
+its submodules pointed at `ModOrganizer2/*` instead. Nothing else differs, which is the point: the
+superbuild never *edits* the repositories it builds, so not one line inside those 34 projects has to
+change ([ADR-001](docs/DECISIONS.md#adr-001)). See
+[ARCHITECTURE.md](docs/ARCHITECTURE.md#the-superbuild-is-not-fork-specific); `MO2_SOURCE_ROOT` also
+points it at any checkout you like.
 
 ## Requirements
 
