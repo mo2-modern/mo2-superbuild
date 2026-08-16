@@ -176,6 +176,29 @@ MO2 belong in the relevant submodule; and please do not add a second copy of any
 list or hash — several of the failures recorded in [TRAPS.md](docs/TRAPS.md) are duplicated facts
 that drifted apart.
 
+## AI assistance
+
+This project was built with substantial help from an AI assistant (Claude). Much of the CMake, the
+documentation, the CI workflow and the release tooling was written that way, as was a good part of
+the analysis behind the fixes in [UPSTREAM.md](docs/UPSTREAM.md).
+
+What that does and does not mean:
+
+- **A person decided, and a person checked.** Every structural decision is mine and recorded as an
+  ADR in [DECISIONS.md](docs/DECISIONS.md), several of them overruling a suggestion. Builds were run,
+  MO2 was launched, and the things a compiler cannot check — usvfs actually hooking, downloads
+  actually downloading — were verified by hand.
+- **Being wrong is written down, not hidden.** [TRAPS.md](docs/TRAPS.md) exists because this project
+  kept producing confident, wrong answers — greps that under-reported, builds that compiled nothing
+  and reported success. Several entries record claims that were made twice and were wrong both times.
+- **Commits carry no AI attribution, deliberately** — see
+  [CONTRIBUTING.md](CONTRIBUTING.md#commits). That is not concealment: these commits are candidates
+  for pull requests against 34 upstream projects, where an assistant trailer is noise a maintainer
+  would have to strip. The disclosure belongs here, once, where it is actually informative.
+
+Judge the code and the verification, not the authorship. Everything asserted here is checkable, and
+where something was *not* verified this documentation tries to say so plainly.
+
 ## License
 
 [GPL-3.0](LICENSE), matching Mod Organizer 2 itself.
