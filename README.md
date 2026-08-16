@@ -3,9 +3,6 @@
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
 [![Built with AI assistance](https://img.shields.io/badge/built%20with-AI%20assistance-8A2BE2.svg)](#)
 
-Built with substantial AI assistance (Claude); the decisions, the builds and the runtime
-verification are mine.
-
 One CMake project that builds all of Mod Organizer 2 from source. Clone it, open the folder in your
 IDE, press build, and get a working `ModOrganizer.exe`.
 
