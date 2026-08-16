@@ -95,9 +95,31 @@ assembly logic.
 end to end. This matters because the obvious objection to the project is that it only builds *our*
 forks, and that turns out not to be true.
 
-Method: each fork's `master` is an untouched upstream mirror ([ADR-001](DECISIONS.md#adr-001)), so
-`git archive origin/master` per repository produced an upstream tree without cloning anything or
-touching `repos/`. Then `-DMO2_SOURCE_ROOT=<that tree>`.
+**To do it yourself:**
+
+```powershell
+.\scripts\export-upstream.ps1
+```
+
+That writes an unmodified upstream tree to `..\mo2-upstream` and prints the exact `cmake` command to
+build it. Each fork's `master` is an untouched upstream mirror ([ADR-001](DECISIONS.md#adr-001)), so
+the sources are already in the objects you cloned — it needs no network and no second multi-GB
+clone. It uses `git archive`, so nothing under `repos/` is checked out, switched or fetched, and an
+interrupted run leaves nothing to clean up.
+
+Two things it will tell you rather than paper over:
+
+- **`origin/master` is only as current as the last sync.** No submodule but `modorganizer` has an
+  `upstream` remote (see [Upstream sync](#upstream-sync)), so there is no fresher reference locally.
+  Once remotes exist, pass `-Ref upstream/master`.
+- **Upstream pins Python 3.13** and `plugin_python` requires it `EXACT`, so on a 3.14-only machine
+  configure stops at the preflight. The script checks which interpreters you have and says so before
+  you spend anything. Editing the pin in the exported tree works, and means it is no longer strictly
+  upstream — which is the one deviation the run below needed.
+
+Build it with a **separate build and install directory** (the printed command does): `--preset
+vs2026` cannot be used, because the preset hardcodes `binaryDir` and would point the upstream build
+at your own `build/`.
 
 | Stage | Result |
 |---|---|
@@ -166,6 +188,7 @@ purely mechanical:
 | `vcpkg.json` | one dependency manifest for the whole project |
 | `cmake/superbuild-redirects/` | satisfies `find_package(mo2-*)` without installing |
 | `cmake/aqt-requirements.txt` | hash-locked dependency closure for the Qt installer |
+| `scripts/export-upstream.ps1` | exports unmodified upstream sources to build against |
 | `repos/` | the 34 upstream repositories, as submodules. Source edits happen here |
 | `vcpkg/` | pinned vcpkg clone, as a submodule |
 | `licenses/` | third-party texts shipped in `bin/licenses` |
