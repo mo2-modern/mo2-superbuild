@@ -261,6 +261,27 @@ clone sits on the same microsoft commit so tool and ports share one tree state.
 (`cmake_common`, `esptk` and `helper` have no `vcpkg.json`.) That is the recurring cost of
 the current design, and it is what [ADR-013](DECISIONS.md#adr-013) is about.
 
+### Where a baseline bump actually has to land
+
+🔴 **Three places, and the second is the one that gets missed.**
+
+1. **`vcpkg.json`** at the root — drives the 207 packages the main build installs.
+2. **`repos/usvfs/vcpkg-configuration.json`** — usvfs is configured as a *nested* CMake project at
+   configure time, so it resolves dependencies through its **own** manifest and registries, not the
+   root one. A build produces three `vcpkg_installed` trees, not one: `build/vcpkg_installed`,
+   `build/usvfs-Win32/vcpkg_installed` and `build/usvfs-x64/vcpkg_installed`.
+3. **The `vcpkg` submodule commit**, which must match the baseline, or the tool and the dependency
+   graph disagree.
+
+Update only the root and usvfs keeps resolving `asmjit` and `spdlog` against the *old* baseline —
+in the DLL that gets injected into every game process, which is the worst place in the project for a
+silently mixed dependency graph. Nothing fails; the versions simply differ.
+
+The **other 30 per-repo manifests are inert here** and need no update: vcpkg reads
+`vcpkg-configuration` only from the top-level project, which is what makes the superbuild's single
+root manifest work at all ([ADR-013](DECISIONS.md#adr-013)). Older notes budget for updating a
+baseline in "all 33 repos" — that was the cost under mob, and it is not the cost now.
+
 ### Port bump recipe
 
 Proven for `7zip` 26.01→26.02 and `libloot` 0.29.5→0.29.6.
