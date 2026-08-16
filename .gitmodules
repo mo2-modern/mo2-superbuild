@@ -1,139 +1,139 @@
 [submodule "cmake_common"]
 	path = repos/cmake_common
-	url = https://github.com/mo2-modern/cmake_common.git
-	branch = modern
+	url = https://github.com/ModOrganizer2/cmake_common.git
+	branch = master
 [submodule "uibase"]
 	path = repos/uibase
-	url = https://github.com/mo2-modern/modorganizer-uibase.git
-	branch = modern
+	url = https://github.com/ModOrganizer2/modorganizer-uibase.git
+	branch = master
 [submodule "helper"]
 	path = repos/helper
-	url = https://github.com/mo2-modern/modorganizer-helper.git
-	branch = modern
+	url = https://github.com/ModOrganizer2/modorganizer-helper.git
+	branch = master
 [submodule "bsatk"]
 	path = repos/bsatk
-	url = https://github.com/mo2-modern/modorganizer-bsatk.git
-	branch = modern
+	url = https://github.com/ModOrganizer2/modorganizer-bsatk.git
+	branch = master
 [submodule "esptk"]
 	path = repos/esptk
-	url = https://github.com/mo2-modern/modorganizer-esptk.git
-	branch = modern
+	url = https://github.com/ModOrganizer2/modorganizer-esptk.git
+	branch = master
 [submodule "lootcli"]
 	path = repos/lootcli
-	url = https://github.com/mo2-modern/modorganizer-lootcli.git
-	branch = modern
+	url = https://github.com/ModOrganizer2/modorganizer-lootcli.git
+	branch = master
 [submodule "nxmhandler"]
 	path = repos/nxmhandler
-	url = https://github.com/mo2-modern/modorganizer-nxmhandler.git
-	branch = modern
+	url = https://github.com/ModOrganizer2/modorganizer-nxmhandler.git
+	branch = master
 [submodule "archive"]
 	path = repos/archive
-	url = https://github.com/mo2-modern/modorganizer-archive.git
-	branch = modern
+	url = https://github.com/ModOrganizer2/modorganizer-archive.git
+	branch = master
 [submodule "game_bethesda"]
 	path = repos/game_bethesda
-	url = https://github.com/mo2-modern/modorganizer-game_bethesda.git
-	branch = modern
+	url = https://github.com/ModOrganizer2/modorganizer-game_bethesda.git
+	branch = master
 [submodule "plugin_python"]
 	path = repos/plugin_python
-	url = https://github.com/mo2-modern/modorganizer-plugin_python.git
-	branch = modern
+	url = https://github.com/ModOrganizer2/modorganizer-plugin_python.git
+	branch = master
 [submodule "tool_inieditor"]
 	path = repos/tool_inieditor
-	url = https://github.com/mo2-modern/modorganizer-tool_inieditor.git
-	branch = modern
+	url = https://github.com/ModOrganizer2/modorganizer-tool_inieditor.git
+	branch = master
 [submodule "installer_wizard"]
 	path = repos/installer_wizard
-	url = https://github.com/mo2-modern/modorganizer-installer_wizard.git
-	branch = modern
+	url = https://github.com/ModOrganizer2/modorganizer-installer_wizard.git
+	branch = master
 [submodule "installer_bundle"]
 	path = repos/installer_bundle
-	url = https://github.com/mo2-modern/modorganizer-installer_bundle.git
-	branch = modern
+	url = https://github.com/ModOrganizer2/modorganizer-installer_bundle.git
+	branch = master
 [submodule "installer_omod"]
 	path = repos/installer_omod
-	url = https://github.com/mo2-modern/modorganizer-installer_omod.git
-	branch = modern
+	url = https://github.com/ModOrganizer2/modorganizer-installer_omod.git
+	branch = master
 [submodule "check_fnis"]
 	path = repos/check_fnis
-	url = https://github.com/mo2-modern/modorganizer-check_fnis.git
-	branch = modern
+	url = https://github.com/ModOrganizer2/modorganizer-check_fnis.git
+	branch = master
 [submodule "installer_bain"]
 	path = repos/installer_bain
-	url = https://github.com/mo2-modern/modorganizer-installer_bain.git
-	branch = modern
+	url = https://github.com/ModOrganizer2/modorganizer-installer_bain.git
+	branch = master
 [submodule "preview_bsa"]
 	path = repos/preview_bsa
-	url = https://github.com/mo2-modern/modorganizer-preview_bsa.git
-	branch = modern
+	url = https://github.com/ModOrganizer2/modorganizer-preview_bsa.git
+	branch = master
 [submodule "diagnose_basic"]
 	path = repos/diagnose_basic
-	url = https://github.com/mo2-modern/modorganizer-diagnose_basic.git
-	branch = modern
+	url = https://github.com/ModOrganizer2/modorganizer-diagnose_basic.git
+	branch = master
 [submodule "installer_manual"]
 	path = repos/installer_manual
-	url = https://github.com/mo2-modern/modorganizer-installer_manual.git
-	branch = modern
+	url = https://github.com/ModOrganizer2/modorganizer-installer_manual.git
+	branch = master
 [submodule "installer_fomod"]
 	path = repos/installer_fomod
-	url = https://github.com/mo2-modern/modorganizer-installer_fomod.git
-	branch = modern
+	url = https://github.com/ModOrganizer2/modorganizer-installer_fomod.git
+	branch = master
 [submodule "tool_inibakery"]
 	path = repos/tool_inibakery
-	url = https://github.com/mo2-modern/modorganizer-tool_inibakery.git
-	branch = modern
+	url = https://github.com/ModOrganizer2/modorganizer-tool_inibakery.git
+	branch = master
 [submodule "installer_quick"]
 	path = repos/installer_quick
-	url = https://github.com/mo2-modern/modorganizer-installer_quick.git
-	branch = modern
+	url = https://github.com/ModOrganizer2/modorganizer-installer_quick.git
+	branch = master
 [submodule "bsa_extractor"]
 	path = repos/bsa_extractor
-	url = https://github.com/mo2-modern/modorganizer-bsa_extractor.git
-	branch = modern
+	url = https://github.com/ModOrganizer2/modorganizer-bsa_extractor.git
+	branch = master
 [submodule "preview_base"]
 	path = repos/preview_base
-	url = https://github.com/mo2-modern/modorganizer-preview_base.git
-	branch = modern
+	url = https://github.com/ModOrganizer2/modorganizer-preview_base.git
+	branch = master
 [submodule "bsapacker"]
 	path = repos/bsapacker
-	url = https://github.com/mo2-modern/modorganizer-bsapacker.git
-	branch = modern
+	url = https://github.com/ModOrganizer2/modorganizer-bsapacker.git
+	branch = master
 [submodule "installer_fomod_csharp"]
 	path = repos/installer_fomod_csharp
-	url = https://github.com/mo2-modern/modorganizer-installer_fomod_csharp.git
-	branch = modern
+	url = https://github.com/ModOrganizer2/modorganizer-installer_fomod_csharp.git
+	branch = master
 [submodule "fnistool"]
 	path = repos/fnistool
-	url = https://github.com/mo2-modern/modorganizer-fnistool.git
-	branch = modern
+	url = https://github.com/ModOrganizer2/modorganizer-fnistool.git
+	branch = master
 [submodule "script_extender_plugin_checker"]
 	path = repos/script_extender_plugin_checker
-	url = https://github.com/mo2-modern/modorganizer-script_extender_plugin_checker.git
-	branch = modern
+	url = https://github.com/ModOrganizer2/modorganizer-script_extender_plugin_checker.git
+	branch = master
 [submodule "preview_dds"]
 	path = repos/preview_dds
-	url = https://github.com/mo2-modern/modorganizer-preview_dds.git
-	branch = modern
+	url = https://github.com/ModOrganizer2/modorganizer-preview_dds.git
+	branch = master
 [submodule "tool_configurator"]
 	path = repos/tool_configurator
-	url = https://github.com/mo2-modern/modorganizer-tool_configurator.git
-	branch = modern
+	url = https://github.com/ModOrganizer2/modorganizer-tool_configurator.git
+	branch = master
 [submodule "basic_games"]
 	path = repos/basic_games
-	url = https://github.com/mo2-modern/modorganizer-basic_games.git
-	branch = modern
+	url = https://github.com/ModOrganizer2/modorganizer-basic_games.git
+	branch = master
 [submodule "form43_checker"]
 	path = repos/form43_checker
-	url = https://github.com/mo2-modern/modorganizer-form43_checker.git
-	branch = modern
+	url = https://github.com/ModOrganizer2/modorganizer-form43_checker.git
+	branch = master
 [submodule "modorganizer"]
 	path = repos/modorganizer
-	url = https://github.com/mo2-modern/modorganizer.git
-	branch = modern
+	url = https://github.com/ModOrganizer2/modorganizer.git
+	branch = master
 [submodule "usvfs"]
 	path = repos/usvfs
-	url = https://github.com/mo2-modern/usvfs.git
-	branch = modern
+	url = https://github.com/ModOrganizer2/usvfs.git
+	branch = master
 [submodule "vcpkg"]
 	path = vcpkg
 	url = https://github.com/microsoft/vcpkg.git
