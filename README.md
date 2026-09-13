@@ -104,7 +104,7 @@ settings.
 | --- | --- | --- |
 | `MO2_AUTO_INSTALL_QT` | `ON` | Download Qt when it cannot be found. Set `OFF` to be given the exact `aqt` command instead. |
 | `MO2_QT_DIR` | auto-detected | Use an existing Qt instead of downloading one. `QTDIR` works too. |
-| `MO2_QT_VERSION` | `6.11.1` | Qt version to build against. |
+| `MO2_QT_VERSION` | `6.11.2` | Qt version to build against. |
 | `MO2_SOURCE_ROOT` | `repos/` | Build a different MO2 checkout instead of this clone's submodules. |
 | `MO2_QT_MODULES` | see `CMakeLists.txt` | Qt modules to install. The only copy of this list; the download and the printed instructions are both generated from it. |
 

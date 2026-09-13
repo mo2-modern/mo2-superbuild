@@ -32,7 +32,7 @@ There used to be a second, unpublished tree built around `mob`. It is retired
 | Visual Studio | **2026** (18.x, Community) | generator `Visual Studio 18 2026`; VS2022 kept as fallback |
 | MSVC toolset | **v145** (14.51) | ABI-compatible with all of 14.x — [ADR-005](DECISIONS.md#adr-005) |
 | CMake | whatever VS ships (**4.3.1**) | The superbuild requires 3.25 and needs no standalone install. [ADR-004](DECISIONS.md#adr-004) put mob on 4.4.2 first on `PATH`; with mob retired that only matters for reading older notes |
-| Qt | **6.11.1** `msvc2022_64` | via `aqtinstall` from git; 3.3 GB; `qt_vs` stays `2022` |
+| Qt | **6.11.2** `msvc2022_64` | via `aqtinstall` from git; 3.3 GB; `qt_vs` stays `2022` |
 | Python (build) | **3.14** | found by CMake through the registry, not PATH |
 | Python (tooling) | **3.14** | `aqt`, `pre-commit` — always `py -3.14 -m <tool>` |
 | LLVM | 22.1.8 | clangd / clang-tidy / clang-cl; **not** on the global PATH |
@@ -254,7 +254,7 @@ sites depend on it, and `if(NOT TARGET …)` cannot guard a module package — s
 Dependencies resolve through **`mo2-modern/vcpkg-registry`** — ours, and we publish to it.
 
 Baselines are unified at **2 registries, both at HEAD** (from 13 baselines spanning 2024-07 →
-2026-06): `microsoft/vcpkg` → `ea1a7396`, `mo2-modern/vcpkg-registry` → `a71daa87`. The local vcpkg
+2026-06): `microsoft/vcpkg` → `a1cae005`, `mo2-modern/vcpkg-registry` → `a71daa87`. The local vcpkg
 clone sits on the same microsoft commit so tool and ports share one tree state.
 
 ⚠️ **Every registry change forces a baseline update in all 31 repos that carry a manifest.**

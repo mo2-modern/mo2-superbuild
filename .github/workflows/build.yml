@@ -314,7 +314,7 @@ jobs:
             ""
             "**This is not an official Mod Organizer 2 release.** Report problems here, not to upstream."
             ""
-            "Built from source by [mo2-superbuild](https://github.com/${{ github.repository }}) on VS2026 / v145 / Qt 6.11.1 / Python 3.14."
+            "Built from source by [mo2-superbuild](https://github.com/${{ github.repository }}) on VS2026 / v145 / Qt 6.11.2 / Python 3.14."
             ""
             "### Changes"
             ""
