@@ -172,7 +172,7 @@ message(STATUS "[MO2] Python: ${Python_EXECUTABLE} (${MO2_PYTHON_VERSION}, from 
 # Qt cannot come from vcpkg: MO2 needs WebEngine, which means a Chromium build. So
 # configure downloads it, staging into qt.tmp/ and renaming only once verified --
 # see ADR-024 for why that staging matters and what MO2_AUTO_INSTALL_QT=OFF does.
-set(MO2_QT_VERSION "6.11.1" CACHE STRING "Qt version to build against")
+set(MO2_QT_VERSION "6.11.2" CACHE STRING "Qt version to build against")
 set(MO2_QT_ARCH "msvc2022_64" CACHE STRING "Qt build to use; msvc2022_64 links fine against v145")
 set(MO2_QT_DIR "" CACHE PATH "Qt prefix. Auto-detected when empty")
 set(MO2_AUTO_INSTALL_QT ON CACHE BOOL "Download Qt with aqt when it cannot be found")

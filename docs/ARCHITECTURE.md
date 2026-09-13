@@ -32,7 +32,7 @@ There used to be a second, unpublished tree built around `mob`. It is retired
 | Visual Studio | **2026** (18.x, Community) | generator `Visual Studio 18 2026`; VS2022 kept as fallback |
 | MSVC toolset | **v145** (14.51) | ABI-compatible with all of 14.x — [ADR-005](DECISIONS.md#adr-005) |
 | CMake | whatever VS ships (**4.3.1**) | The superbuild requires 3.25 and needs no standalone install. [ADR-004](DECISIONS.md#adr-004) put mob on 4.4.2 first on `PATH`; with mob retired that only matters for reading older notes |
-| Qt | **6.11.1** `msvc2022_64` | via `aqtinstall` from git; 3.3 GB; `qt_vs` stays `2022` |
+| Qt | **6.11.2** `msvc2022_64` | via `aqtinstall` from git; 3.3 GB; `qt_vs` stays `2022` |
 | Python (build) | **3.14** | found by CMake through the registry, not PATH |
 | Python (tooling) | **3.14** | `aqt`, `pre-commit` — always `py -3.14 -m <tool>` |
 | LLVM | 22.1.8 | clangd / clang-tidy / clang-cl; **not** on the global PATH |
@@ -146,22 +146,29 @@ confirmed against 4.4.2.
 
 ### Upstream sync
 
-🔴 **There is no sync tooling in this repository, and the submodules have no `upstream` remote.**
-Each `repos/*` checkout has only `origin`, pointing at the `mo2-modern` fork, so nothing here can
-even fetch `ModOrganizer2/*` to compare against. A `sync-upstream.ps1` existed in the mob tree and
-survives among its leftovers; bringing it in — or rewriting it — is the first task of any upstream
-sweep, because the survey cannot be run without it.
+```powershell
+.\scripts\sync-upstream.ps1              # fetch and report; changes nothing
+.\scripts\sync-upstream.ps1 -Apply -Push # do it
+```
 
-When it is restored, the flow is [ADR-001](DECISIONS.md#adr-001)'s:
-`upstream/master → origin/master → merge into origin/modern`, never rebase. Keep `upstream` remotes
-fetch-only (`set-url --push upstream DISABLED`), and build their URLs over HTTPS — mob's
-`git add-remote` produced SSH URLs, which do not authenticate against a gh-credential-helper setup.
+Per repository it fast-forwards `master` from `ModOrganizer2/*` and merges `master` into `modern`,
+which is [ADR-001](DECISIONS.md#adr-001)'s flow. It cannot violate that ADR by accident: `master` is advanced by
+a **fast-forward-only ref update**, so a `master` that has been committed to fails loudly instead of
+being rewritten, and nothing is ever rebased.
 
-⚠️ **The merge-conflict path has never been exercised.** The one sync run that happened was clean
-because upstream had not moved.
+**Conflicts are never auto-resolved.** The merge is aborted, the repository is left clean, and the
+name is reported — a half-merged submodule is a worse thing to hand someone than a list.
 
-⚠️ **Conflict handling is still untested.** The first sync run was clean because upstream had not
-moved. The loop is proven; the merge-conflict path is not.
+It adds the fetch-only `upstream` remote where one is missing, so it works on a fresh clone. That
+closes a gap this document used to describe: no submodule had an upstream remote, so there was no
+way to compare against `ModOrganizer2/*` at all.
+
+⚠️ **A clean merge is not a working build.** After `-Apply`, the superbuild's gitlinks lag the
+submodules; commit them and rebuild before trusting anything.
+
+**Measured 2026-08-16:** all 34 repositories are level with upstream — verified twice, once through
+the script and once by asking GitHub directly for each `refs/heads/master`. Upstream has not moved
+since the last sync.
 
 ### Staying upstream-conformant
 
@@ -188,6 +195,7 @@ purely mechanical:
 | `vcpkg.json` | one dependency manifest for the whole project |
 | `cmake/superbuild-redirects/` | satisfies `find_package(mo2-*)` without installing |
 | `cmake/aqt-requirements.txt` | hash-locked dependency closure for the Qt installer |
+| `scripts/sync-upstream.ps1` | pulls upstream into every fork, per ADR-001 |
 | `repos/` | the 34 upstream repositories, as submodules. Source edits happen here |
 | `vcpkg/` | pinned vcpkg clone, as a submodule |
 | `licenses/` | third-party texts shipped in `bin/licenses` |
@@ -246,12 +254,33 @@ sites depend on it, and `if(NOT TARGET …)` cannot guard a module package — s
 Dependencies resolve through **`mo2-modern/vcpkg-registry`** — ours, and we publish to it.
 
 Baselines are unified at **2 registries, both at HEAD** (from 13 baselines spanning 2024-07 →
-2026-06): `microsoft/vcpkg` → `ea1a7396`, `mo2-modern/vcpkg-registry` → `a71daa87`. The local vcpkg
+2026-06): `microsoft/vcpkg` → `a1cae005`, `mo2-modern/vcpkg-registry` → `a71daa87`. The local vcpkg
 clone sits on the same microsoft commit so tool and ports share one tree state.
 
 ⚠️ **Every registry change forces a baseline update in all 31 repos that carry a manifest.**
 (`cmake_common`, `esptk` and `helper` have no `vcpkg.json`.) That is the recurring cost of
 the current design, and it is what [ADR-013](DECISIONS.md#adr-013) is about.
+
+### Where a baseline bump actually has to land
+
+🔴 **Three places, and the second is the one that gets missed.**
+
+1. **`vcpkg.json`** at the root — drives the 207 packages the main build installs.
+2. **`repos/usvfs/vcpkg-configuration.json`** — usvfs is configured as a *nested* CMake project at
+   configure time, so it resolves dependencies through its **own** manifest and registries, not the
+   root one. A build produces three `vcpkg_installed` trees, not one: `build/vcpkg_installed`,
+   `build/usvfs-Win32/vcpkg_installed` and `build/usvfs-x64/vcpkg_installed`.
+3. **The `vcpkg` submodule commit**, which must match the baseline, or the tool and the dependency
+   graph disagree.
+
+Update only the root and usvfs keeps resolving `asmjit` and `spdlog` against the *old* baseline —
+in the DLL that gets injected into every game process, which is the worst place in the project for a
+silently mixed dependency graph. Nothing fails; the versions simply differ.
+
+The **other 30 per-repo manifests are inert here** and need no update: vcpkg reads
+`vcpkg-configuration` only from the top-level project, which is what makes the superbuild's single
+root manifest work at all ([ADR-013](DECISIONS.md#adr-013)). Older notes budget for updating a
+baseline in "all 33 repos" — that was the cost under mob, and it is not the cost now.
 
 ### Port bump recipe
 
